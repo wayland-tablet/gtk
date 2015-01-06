@@ -71,6 +71,7 @@ struct _GdkDevice
 
   GdkSeat *seat;
   GPtrArray *tools;
+  GdkDeviceTool *last_tool;
 };
 
 struct _GdkDeviceClass
@@ -195,6 +196,8 @@ GdkDeviceTool *gdk_device_tool_new    (guint          serial);
 GdkDeviceTool *gdk_device_lookup_tool (GdkDevice     *device,
                                        guint          serial);
 void           gdk_device_add_tool    (GdkDevice     *device,
+                                       GdkDeviceTool *tool);
+void           gdk_device_update_tool (GdkDevice     *device,
                                        GdkDeviceTool *tool);
 
 GdkDeviceTool *gdk_device_tool_ref    (GdkDeviceTool *tool);
