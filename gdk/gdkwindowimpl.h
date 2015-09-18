@@ -27,6 +27,7 @@
 
 #include <gdk/gdkwindow.h>
 #include <gdk/gdkproperty.h>
+#include <gdk/gdkattachparams.h>
 
 G_BEGIN_DECLS
 
@@ -301,6 +302,9 @@ struct _GdkWindowImplClass
                                            GError        **error);
   void         (*invalidate_for_new_frame)(GdkWindow      *window,
                                            cairo_region_t *update_area);
+
+  void         (* set_attach_params)      (GdkWindow             *window,
+                                           const GdkAttachParams *params);
 };
 
 /* Interface Functions */
