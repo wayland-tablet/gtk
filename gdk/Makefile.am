@@ -63,6 +63,7 @@ gdk_public_h_sources = 				\
 	gdk.h					\
 	gdk-autocleanup.h			\
 	gdkapplaunchcontext.h			\
+	gdkattachparams.h			\
 	gdkcairo.h				\
 	gdkcursor.h				\
 	gdkdevice.h				\
@@ -102,6 +103,7 @@ gdk_h_sources =					\
 gdk_private_headers = 				\
 	gdk-private.h				\
 	gdkapplaunchcontextprivate.h		\
+	gdkattachparamsprivate.h		\
 	gdkcursorprivate.h			\
 	gdkdevicemanagerprivate.h		\
 	gdkdeviceprivate.h			\
@@ -126,6 +128,7 @@ gdk_c_sources = 				\
 	gdk-private.c				\
 	gdk.c					\
 	gdkapplaunchcontext.c			\
+	gdkattachparams.c			\
 	gdkcairo.c				\
 	gdkcursor.c				\
 	gdkdeprecated.c				\

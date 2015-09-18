@@ -546,6 +546,37 @@ gdk_fullscreen_mode_get_type
 </SECTION>
 
 <SECTION>
+<TITLE>Attachment Parameters</TITLE>
+<FILE>gdkattachparams</FILE>
+GdkAttachParams
+GdkAttachRule
+GdkAttachCallback
+gdk_attach_params_new
+gdk_attach_params_copy
+gdk_attach_params_free
+gdk_attach_params_set_attach_origin
+gdk_attach_params_set_attach_rect
+gdk_attach_params_set_attach_margin
+gdk_attach_params_set_window_margin
+gdk_attach_params_set_window_padding
+gdk_attach_params_set_window_offset
+gdk_attach_params_get_window_type_hint
+gdk_attach_params_set_window_type_hint
+gdk_attach_params_set_right_to_left
+gdk_attach_params_add_primary_rules
+gdk_attach_params_add_secondary_rules
+gdk_attach_params_add_primary_rules_valist
+gdk_attach_params_add_secondary_rules_valist
+gdk_attach_params_set_position_callback
+
+<SUBSECTION Private>
+_GdkAttachParams
+gdk_attach_params_choose_position
+gdk_attach_params_choose_position_for_window
+gdk_window_move_using_attach_params
+</SECTION>
+
+<SECTION>
 <TITLE>Selections</TITLE>
 <FILE>selections</FILE>
 GDK_SELECTION_PRIMARY
