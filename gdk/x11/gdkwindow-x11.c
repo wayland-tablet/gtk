@@ -39,6 +39,7 @@
 #include "gdkglcontext-x11.h"
 #include "gdkprivate-x11.h"
 #include "gdk-private.h"
+#include "gdkattachparamsprivate.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -5770,4 +5771,5 @@ gdk_window_impl_x11_class_init (GdkWindowImplX11Class *klass)
   impl_class->create_gl_context = gdk_x11_window_create_gl_context;
   impl_class->invalidate_for_new_frame = gdk_x11_window_invalidate_for_new_frame;
   impl_class->get_unscaled_size = gdk_x11_window_get_unscaled_size;
+  impl_class->set_attach_params = gdk_window_move_using_attach_params;
 }
