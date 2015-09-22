@@ -6495,44 +6495,6 @@ popup_menu_detach (GtkWidget *attach_widget,
 }
 
 static void
-popup_position_func (GtkMenu   *menu,
-                     gint      *x,
-                     gint      *y,
-                     gboolean  *push_in,
-                     gpointer	user_data)
-{
-  GtkLabel *label;
-  GtkWidget *widget;
-  GtkAllocation allocation;
-  GtkRequisition req;
-  GdkScreen *screen;
-
-  label = GTK_LABEL (user_data);
-  widget = GTK_WIDGET (label);
-
-  g_return_if_fail (gtk_widget_get_realized (widget));
-
-  screen = gtk_widget_get_screen (widget);
-  gdk_window_get_origin (gtk_widget_get_window (widget), x, y);
-
-  gtk_widget_get_allocation (widget, &allocation);
-
-  *x += allocation.x;
-  *y += allocation.y;
-
-  gtk_widget_get_preferred_size (GTK_WIDGET (menu),
-                                 &req, NULL);
-
-  gtk_widget_get_allocation (widget, &allocation);
-
-  *x += allocation.width / 2;
-  *y += allocation.height;
-
-  *x = CLAMP (*x, 0, MAX (0, gdk_screen_get_width (screen) - req.width));
-  *y = CLAMP (*y, 0, MAX (0, gdk_screen_get_height (screen) - req.height));
-}
-
-static void
 open_link_activate_cb (GtkMenuItem *menuitem,
                        GtkLabel    *label)
 {
@@ -6571,6 +6533,7 @@ gtk_label_do_popup (GtkLabel       *label,
   GtkWidget *menu;
   gboolean have_selection;
   GtkLabelLink *link;
+  GdkAttachParams *params;
 
   if (!priv->select_info)
     return;
@@ -6642,14 +6605,35 @@ gtk_label_do_popup (GtkLabel       *label,
   g_signal_emit (label, signals[POPULATE_POPUP], 0, menu);
 
   if (event)
-    gtk_menu_popup (GTK_MENU (menu), NULL, NULL,
-                    NULL, NULL,
-                    event->button, event->time);
+    gtk_menu_popup_with_params (GTK_MENU (menu),
+                                NULL,
+                                NULL,
+                                NULL,
+                                event->button,
+                                event->time,
+                                NULL);
   else
     {
-      gtk_menu_popup (GTK_MENU (menu), NULL, NULL,
-                      popup_position_func, label,
-                      0, gtk_get_current_event_time ());
+      params = gtk_menu_create_params (GTK_MENU (menu));
+
+      gdk_attach_params_add_primary_rules (params,
+                                           GDK_ATTACH_AXIS_Y | GDK_ATTACH_RECT_MAX | GDK_ATTACH_WINDOW_MIN,
+                                           GDK_ATTACH_AXIS_Y | GDK_ATTACH_RECT_MIN | GDK_ATTACH_WINDOW_MAX,
+                                           NULL);
+
+      gdk_attach_params_add_secondary_rules (params,
+                                             GDK_ATTACH_AXIS_X | GDK_ATTACH_RECT_MID | GDK_ATTACH_WINDOW_MIN | GDK_ATTACH_FLIP_IF_RTL,
+                                             GDK_ATTACH_AXIS_X | GDK_ATTACH_RECT_MID | GDK_ATTACH_WINDOW_MAX | GDK_ATTACH_FLIP_IF_RTL,
+                                             NULL);
+
+      gtk_menu_popup_with_params (GTK_MENU (menu),
+                                  NULL,
+                                  NULL,
+                                  GTK_WIDGET (label),
+                                  0,
+                                  gtk_get_current_event_time (),
+                                  params);
+
       gtk_menu_shell_select_first (GTK_MENU_SHELL (menu), FALSE);
     }
 }
