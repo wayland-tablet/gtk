@@ -37,6 +37,7 @@
 #include "gdkinternals.h"
 #include "gdkdeviceprivate.h"
 #include "gdkeventsource.h"
+#include "gdkattachparamsprivate.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -1626,4 +1627,5 @@ gdk_window_impl_broadway_class_init (GdkWindowImplBroadwayClass *klass)
   impl_class->change_property = _gdk_broadway_window_change_property;
   impl_class->delete_property = _gdk_broadway_window_delete_property;
   impl_class->get_drag_protocol = _gdk_broadway_window_get_drag_protocol;
+  impl_class->set_attach_params = gdk_window_move_using_attach_params;
 }
