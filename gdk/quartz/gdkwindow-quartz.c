@@ -28,6 +28,7 @@
 #include "gdkglcontext-quartz.h"
 #include "gdkquartzscreen.h"
 #include "gdkquartzcursor.h"
+#include "gdkattachparamsprivate.h"
 
 #include <Carbon/Carbon.h>
 #include <AvailabilityMacros.h>
@@ -2958,6 +2959,7 @@ gdk_window_impl_quartz_class_init (GdkWindowImplQuartzClass *klass)
   impl_class->delete_property = _gdk_quartz_window_delete_property;
 
   impl_class->create_gl_context = gdk_quartz_window_create_gl_context;
+  impl_class->set_attach_params = gdk_window_move_using_attach_params;
 
   impl_quartz_class->get_context = gdk_window_impl_quartz_get_context;
   impl_quartz_class->release_context = gdk_window_impl_quartz_release_context;
