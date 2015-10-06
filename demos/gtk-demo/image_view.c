@@ -19,7 +19,7 @@ file_set_cb (GtkFileChooserButton *widget,
   GFile *file = g_file_new_for_path (filename);
   gtk_image_view_load_from_file_async (GTK_IMAGE_VIEW (image_view),
                                        file,
-                                       1,
+                                       2,
                                        NULL,
                                        generic_cb,
                                        NULL);
@@ -92,10 +92,10 @@ scrolled_check_button_active_cb (GObject *source)
   else
     {
       GtkWidget *scroller = gtk_scrolled_window_new (NULL, NULL);
-      gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroller),
-                                      GTK_POLICY_ALWAYS,
-                                      GTK_POLICY_ALWAYS);
-      gtk_scrolled_window_set_overlay_scrolling (GTK_SCROLLED_WINDOW (scroller), FALSE);
+      /*gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scroller),*/
+                                      /*GTK_POLICY_ALWAYS,*/
+                                      /*GTK_POLICY_ALWAYS);*/
+      gtk_scrolled_window_set_overlay_scrolling (GTK_SCROLLED_WINDOW (scroller), TRUE);
       gtk_widget_show (scroller);
       gtk_container_remove (GTK_CONTAINER (parent), image_view);
       gtk_container_add (GTK_CONTAINER (scroller), image_view);
@@ -127,11 +127,11 @@ load_pixbuf_button_clicked_cb ()
   GdkPixbuf *pixbuf;
 
   /* I really hope you have this. */
-  pixbuf = gdk_pixbuf_new_from_file ("/usr/share/backgrounds/gnome/adwaita-day.jpg",
+  pixbuf = gdk_pixbuf_new_from_file ("/home/baedert/imageview.png",
                                      NULL);
 
   g_assert (pixbuf != NULL);
-  gtk_image_view_set_pixbuf (GTK_IMAGE_VIEW (image_view), pixbuf, 1);
+  gtk_image_view_set_pixbuf (GTK_IMAGE_VIEW (image_view), pixbuf, 2);
 
   g_object_unref (G_OBJECT (pixbuf));
 }
@@ -224,6 +224,7 @@ do_image_view (GtkWidget *do_widget)
 
   /*g_signal_connect (G_OBJECT (image_view), "prepare-image", G_CALLBACK (prepare_image_cb), NULL);*/
 
+  gtk_window_set_title (GTK_WINDOW (window), "blue: current, green: anchor");
 
   g_object_bind_property (scale_adjustment, "value", image_view, "scale",
                           G_BINDING_BIDIRECTIONAL);
@@ -238,7 +239,7 @@ do_image_view (GtkWidget *do_widget)
   gtk_container_add (GTK_CONTAINER (window), box);
   gtk_builder_connect_signals (builder, NULL);
 
-  gtk_window_resize (GTK_WINDOW (window), 800, 600);
+  /*gtk_window_resize (GTK_WINDOW (window), 800, 600);*/
   gtk_widget_show_all (window);
   return window;
 }
