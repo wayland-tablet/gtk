@@ -31,6 +31,7 @@
 #include "gdkprivate-wayland.h"
 #include "gdkinternals.h"
 #include "gdkdeviceprivate.h"
+#include "gdkattachparamsprivate.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -2485,6 +2486,7 @@ _gdk_window_impl_wayland_class_init (GdkWindowImplWaylandClass *klass)
   impl_class->show_window_menu = gdk_wayland_window_show_window_menu;
   impl_class->create_gl_context = gdk_wayland_window_create_gl_context;
   impl_class->invalidate_for_new_frame = gdk_wayland_window_invalidate_for_new_frame;
+  impl_class->set_attach_params = gdk_window_move_using_attach_params;
 
   signals[COMMITTED] = g_signal_new ("committed",
                                      G_TYPE_FROM_CLASS (object_class),
