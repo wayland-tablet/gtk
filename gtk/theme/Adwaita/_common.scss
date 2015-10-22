@@ -1247,20 +1247,29 @@ headerbar {
  * Pathbars *
  ************/
 
-.path-bar button {
-  padding: 5px 6px 6px;
-  &:first-child { padding-left: 8px; }
-  &:last-child { padding-right: 8px; }
-  &:only-child {
-    padding-left: 12px;
-    padding-right: 12px;
-  }
+path-bar button.flat, .path-bar-overflow-popover button.flat {
+    background-image: none;
+    border-radius: 0px;
+    border-color: transparent;
+    border-width: 2px 0px 2px 0px;
+    box-shadow: 0px 0px 0px;
+    margin: 0px;
+    opacity: 0.55;
+    padding: 3px 8px 4px;
 
-  // the following is for spacing the icon and the label inside the home button
-  & label:last-child { padding-left: 2px; }
-  & label:first-child { padding-right: 2px; }
-  & label:only-child { padding-right: 0; padding-left: 0; }
-  image { padding-top: 1px; }
+    &:checked {
+      opacity: 1;
+    }
+
+    &:hover {
+      border-bottom-color: mix($selected_bg_color, $selected_fg_color, 75%);
+    }
+
+    &:backdrop, &:backdrop:checked {
+      background-color: transparent;
+      border-color: transparent;
+      background-image: none;
+    }
 }
 
 /**************

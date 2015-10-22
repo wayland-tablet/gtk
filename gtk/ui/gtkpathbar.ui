@@ -1,54 +1,95 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface domain="gtk30">
-  <!-- interface-requires gtk+ 3.10 -->
-  <object class="GtkButton" id="down_slider_button">
-    <property name="visible">1</property>
-    <property name="can_focus">1</property>
-    <property name="receives_default">1</property>
-    <property name="focus_on_click">0</property>
-    <child internal-child="accessible">
-      <object class="AtkObject" id="down_slider_button-atkobject">
-        <property name="AtkObject::accessible-name" translatable="yes">Down Path</property>
-      </object>
-    </child>
-    <signal name="button-press-event" handler="gtk_path_bar_slider_button_press" swapped="no"/>
-    <signal name="button-release-event" handler="gtk_path_bar_slider_button_release" swapped="no"/>
-    <signal name="focus-out-event" handler="gtk_path_bar_slider_down_defocus" swapped="no"/>
-    <signal name="unmap" handler="on_slider_unmap" swapped="no"/>
-    <child>
-      <object class="GtkImage">
-        <property name="visible">1</property>
-        <property name="icon-name">pan-end-symbolic</property>
-        <property name="icon-size">1</property>
-      </object>
-    </child>
+  <object class="GtkPopover" id="overflow_popover_1">
+   <property name="width-request">200</property>
+   <child>
+     <object class="GtkBox">
+       <property name="visible">true</property>
+       <property name="orientation">GTK_ORIENTATION_VERTICAL</property>
+     </object>
+   </child>
     <style>
-      <class name="image-button"/>
+      <class name="path-bar-overflow-popover"/>
     </style>
   </object>
-  <object class="GtkButton" id="up_slider_button">
-    <property name="visible">1</property>
-    <property name="can_focus">1</property>
-    <property name="receives_default">1</property>
-    <property name="focus_on_click">0</property>
-    <child internal-child="accessible">
-      <object class="AtkObject" id="up_slider_button-atkobject">
-        <property name="AtkObject::accessible-name" translatable="yes">Up Path</property>
-      </object>
-    </child>
-    <signal name="button-press-event" handler="gtk_path_bar_slider_button_press" swapped="no"/>
-    <signal name="button-release-event" handler="gtk_path_bar_slider_button_release" swapped="no"/>
-    <signal name="focus-out-event" handler="gtk_path_bar_slider_up_defocus" swapped="no"/>
-    <signal name="unmap" handler="on_slider_unmap" swapped="no"/>
-    <child>
-      <object class="GtkImage">
-        <property name="visible">1</property>
-        <property name="icon-name">pan-start-symbolic</property>
-        <property name="icon-size">1</property>
-      </object>
-    </child>
+  <object class="GtkPopover" id="overflow_popover_2">
+   <property name="width-request">200</property>
+   <child>
+     <object class="GtkBox">
+       <property name="visible">true</property>
+       <property name="orientation">GTK_ORIENTATION_VERTICAL</property>
+     </object>
+   </child>
     <style>
-      <class name="image-button"/>
+      <class name="path-bar-overflow-popover"/>
     </style>
   </object>
+  <template class="GtkPathBar" parent="GtkBin">
+    <child>
+      <object class="GtkStack" id="path_bar_containers_stack">
+        <property name="visible">true</property>
+        <property name="valign">GTK_ALIGN_START</property>
+        <property name="vexpand">false</property>
+        <property name="transition-type">GTK_STACK_TRANSITION_TYPE_CROSSFADE</property>
+        <property name="transition-duration">150</property>
+        <child>
+          <object class="GtkPathBarContainer" id="path_bar_container_1">
+            <property name="visible">true</property>
+            <child internal-child="overflow_button">
+              <object class="GtkMenuButton" id="overflow_button_1">
+                <property name="visible">true</property>
+                <property name="popover">overflow_popover_1</property>
+                <signal name="clicked" handler="populate_overflow_popover" object="GtkPathBar" swapped="yes"/>
+                <child>
+                  <object class="GtkImage">
+                    <property name="visible">true</property>
+                    <property name="icon_name">image-loading-symbolic</property>
+                    <property name="icon_size">1</property>
+                  </object>
+                </child>
+                <style>
+                  <class name="flat"/>
+                </style>
+              </object>
+            </child>
+            <child internal-child="path_box">
+              <object class="GtkHidingBox" id="path_box_1">
+                <property name="visible">true</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkPathBarContainer" id="path_bar_container_2">
+            <property name="visible">true</property>
+            <child internal-child="overflow_button">
+              <object class="GtkMenuButton" id="overflow_button_2">
+                <property name="visible">true</property>
+                <property name="popover">overflow_popover_2</property>
+                <signal name="clicked" handler="populate_overflow_popover" object="GtkPathBar" swapped="yes"/>
+                <child>
+                  <object class="GtkImage">
+                    <property name="visible">true</property>
+                    <property name="icon_name">image-loading-symbolic</property>
+                    <property name="icon_size">1</property>
+                  </object>
+                </child>
+                <style>
+                  <class name="flat"/>
+                </style>
+              </object>
+            </child>
+            <child internal-child="path_box">
+              <object class="GtkHidingBox" id="path_box_2">
+                <property name="visible">true</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <style>
+          <class name="path-bar"/>
+        </style>
+      </object>
+    </child>
+  </template>
 </interface>

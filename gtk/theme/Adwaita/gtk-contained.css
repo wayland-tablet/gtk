@@ -1862,28 +1862,43 @@ headerbar {
 /************
  * Pathbars *
  ************/
-.path-bar button, .path-bar headerbar button.titlebutton, headerbar .path-bar button.titlebutton,
-.path-bar .titlebar button.titlebutton,
-.titlebar .path-bar button.titlebutton {
-  padding: 5px 6px 6px; }
-  .path-bar button:first-child {
-    padding-left: 8px; }
-  .path-bar button:last-child {
-    padding-right: 8px; }
-  .path-bar button:only-child {
-    padding-left: 12px;
-    padding-right: 12px; }
-  .path-bar button label:last-child {
-    padding-left: 2px; }
-  .path-bar button label:first-child {
-    padding-right: 2px; }
-  .path-bar button label:only-child {
-    padding-right: 0;
-    padding-left: 0; }
-  .path-bar button image,
-  .path-bar .titlebar button.titlebutton image,
-  .titlebar .path-bar button.titlebutton image {
-    padding-top: 1px; }
+path-bar button.flat, path-bar button.sidebar-button, path-bar headerbar button.titlebutton, headerbar path-bar button.titlebutton,
+path-bar .titlebar button.titlebutton,
+.titlebar path-bar button.titlebutton, .path-bar-overflow-popover button.flat, .path-bar-overflow-popover button.sidebar-button, .path-bar-overflow-popover headerbar button.titlebutton, headerbar .path-bar-overflow-popover button.titlebutton,
+.path-bar-overflow-popover .titlebar button.titlebutton,
+.titlebar .path-bar-overflow-popover button.titlebutton {
+  background-image: none;
+  border-radius: 0px;
+  border-color: transparent;
+  border-width: 2px 0px 2px 0px;
+  box-shadow: 0px 0px 0px;
+  margin: 0px;
+  opacity: 0.55;
+  padding: 3px 8px 4px; }
+  path-bar button.flat:checked, path-bar button.sidebar-button:checked, path-bar headerbar button.titlebutton:checked, headerbar path-bar button.titlebutton:checked,
+  path-bar .titlebar button.titlebutton:checked,
+  .titlebar path-bar button.titlebutton:checked, .path-bar-overflow-popover button.flat:checked, .path-bar-overflow-popover button.sidebar-button:checked, .path-bar-overflow-popover headerbar button.titlebutton:checked, headerbar .path-bar-overflow-popover button.titlebutton:checked,
+  .path-bar-overflow-popover .titlebar button.titlebutton:checked,
+  .titlebar .path-bar-overflow-popover button.titlebutton:checked {
+    opacity: 1; }
+  path-bar button.flat:hover, path-bar button.sidebar-button:hover, path-bar headerbar button.titlebutton:hover, headerbar path-bar button.titlebutton:hover,
+  path-bar .titlebar button.titlebutton:hover,
+  .titlebar path-bar button.titlebutton:hover, .path-bar-overflow-popover button.flat:hover, .path-bar-overflow-popover button.sidebar-button:hover, .path-bar-overflow-popover headerbar button.titlebutton:hover, headerbar .path-bar-overflow-popover button.titlebutton:hover,
+  .path-bar-overflow-popover .titlebar button.titlebutton:hover,
+  .titlebar .path-bar-overflow-popover button.titlebutton:hover {
+    border-bottom-color: #77ace3; }
+  path-bar button.flat:backdrop, path-bar button.sidebar-button:backdrop, path-bar headerbar button.titlebutton:backdrop, headerbar path-bar button.titlebutton:backdrop,
+  path-bar .titlebar button.titlebutton:backdrop,
+  .titlebar path-bar button.titlebutton:backdrop, path-bar button.flat:backdrop:checked, path-bar button.sidebar-button:backdrop:checked, path-bar headerbar button.titlebutton:backdrop:checked, headerbar path-bar button.titlebutton:backdrop:checked,
+  path-bar .titlebar button.titlebutton:backdrop:checked,
+  .titlebar path-bar button.titlebutton:backdrop:checked, .path-bar-overflow-popover button.flat:backdrop, .path-bar-overflow-popover button.sidebar-button:backdrop, .path-bar-overflow-popover headerbar button.titlebutton:backdrop, headerbar .path-bar-overflow-popover button.titlebutton:backdrop,
+  .path-bar-overflow-popover .titlebar button.titlebutton:backdrop,
+  .titlebar .path-bar-overflow-popover button.titlebutton:backdrop, .path-bar-overflow-popover button.flat:backdrop:checked, .path-bar-overflow-popover button.sidebar-button:backdrop:checked, .path-bar-overflow-popover headerbar button.titlebutton:backdrop:checked, headerbar .path-bar-overflow-popover button.titlebutton:backdrop:checked,
+  .path-bar-overflow-popover .titlebar button.titlebutton:backdrop:checked,
+  .titlebar .path-bar-overflow-popover button.titlebutton:backdrop:checked {
+    background-color: transparent;
+    border-color: transparent;
+    background-image: none; }
 
 /**************
  * Tree Views *
