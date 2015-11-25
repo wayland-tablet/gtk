@@ -213,7 +213,7 @@ gtk_do_render_arrow (GtkStyleContext *context,
  *
  * Renders an arrow pointing to @angle.
  *
- * Typical arrow rendering at 0, 1&solidus;2 &pi;, &pi; and 3&solidus;2 &pi;:
+ * Typical arrow rendering at 0, 1⁄2 π;, π; and 3⁄2 π:
  *
  * ![](arrows.png)
  *
@@ -236,12 +236,8 @@ gtk_render_arrow (GtkStyleContext *context,
   cairo_save (cr);
   cairo_new_path (cr);
 
-  gtk_style_context_save (context);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_ARROW);
-
   gtk_do_render_arrow (context, cr, angle, x, y, size);
 
-  gtk_style_context_restore (context);
   cairo_restore (cr);
 }
 
@@ -1204,6 +1200,13 @@ gtk_render_icon_pixbuf (GtkStyleContext     *context,
  * @y: Y position for the @pixbuf
  *
  * Renders the icon in @pixbuf at the specified @x and @y coordinates.
+ *
+ * This function will render the icon in @pixbuf at exactly its size,
+ * regardless of scaling factors, which may not be appropriate when
+ * drawing on displays with high pixel densities.
+ *
+ * You probably want to use gtk_render_icon_surface() instead, if you
+ * already have a Cairo surface.
  *
  * Since: 3.2
  **/

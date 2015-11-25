@@ -19,6 +19,7 @@
 #include <glib/gi18n-lib.h>
 
 #include "prop-editor.h"
+#include "strv-editor.h"
 #include "object-tree.h"
 
 #include "gtkactionable.h"
@@ -41,6 +42,7 @@
 #include "gtksettingsprivate.h"
 #include "gtktogglebutton.h"
 #include "gtkwidgetprivate.h"
+#include "gtkcssnodeprivate.h"
 
 struct _GtkInspectorPropEditorPrivate
 {
@@ -149,6 +151,24 @@ g_object_connect_property (GObject    *object,
                           dd, disconnect_func);
 
   g_free (with_detail);
+}
+
+static void
+block_notify (GObject *editor)
+{
+  DisconnectData *dd = (DisconnectData *)g_object_get_data (editor, "alive-object-data");
+
+  if (dd)
+    g_signal_handler_block (dd->instance, dd->id);
+}
+
+static void
+unblock_notify (GObject *editor)
+{
+  DisconnectData *dd = (DisconnectData *)g_object_get_data (editor, "alive-object-data");
+
+  if (dd)
+    g_signal_handler_unblock (dd->instance, dd->id);
 }
 
 typedef struct
@@ -375,6 +395,18 @@ string_modified (GtkEntry *entry, ObjectProperty *p)
 }
 
 static void
+intern_string_modified (GtkEntry *entry, ObjectProperty *p)
+{
+  const gchar *s;
+
+  s = g_intern_string (gtk_entry_get_text (entry));
+  if (g_str_equal (p->spec->name, "id"))
+    gtk_css_node_set_id (GTK_CSS_NODE (p->obj), s);
+  else if (g_str_equal (p->spec->name, "name"))
+    gtk_css_node_set_name (GTK_CSS_NODE (p->obj), s);
+}
+
+static void
 string_changed (GObject *object, GParamSpec *pspec, gpointer data)
 {
   GtkEntry *entry = GTK_ENTRY (data);
@@ -399,6 +431,38 @@ string_changed (GObject *object, GParamSpec *pspec, gpointer data)
   g_value_unset (&val);
 }
 
+static void
+strv_modified (GtkInspectorStrvEditor *editor, ObjectProperty *p)
+{
+  GValue val = G_VALUE_INIT;
+  gchar **strv;
+
+  g_value_init (&val, G_TYPE_STRV);
+  strv = gtk_inspector_strv_editor_get_strv (editor);
+  g_value_take_boxed (&val, strv);
+  block_notify (G_OBJECT (editor));
+  set_property_value (p->obj, p->spec, &val);
+  unblock_notify (G_OBJECT (editor));
+  g_value_unset (&val);
+}
+
+static void
+strv_changed (GObject *object, GParamSpec *pspec, gpointer data)
+{
+  GtkInspectorStrvEditor *editor = data;
+  GValue val = G_VALUE_INIT;
+  gchar **strv;
+
+  g_value_init (&val, G_TYPE_STRV);
+  get_property_value (object, pspec, &val);
+
+  strv = g_value_get_boxed (&val);
+  block_controller (G_OBJECT (editor));
+  gtk_inspector_strv_editor_set_strv (editor, strv);
+  unblock_controller (G_OBJECT (editor));
+
+  g_value_unset (&val);
+}
 static void
 bool_modified (GtkToggleButton *tb, ObjectProperty *p)
 {
@@ -871,8 +935,12 @@ property_editor (GObject                *object,
                                  G_CALLBACK (string_changed),
                                  prop_edit, G_OBJECT (prop_edit));
 
-      connect_controller (G_OBJECT (prop_edit), "changed",
-                          object, spec, G_CALLBACK (string_modified));
+      if (GTK_IS_CSS_NODE (object))
+        connect_controller (G_OBJECT (prop_edit), "changed",
+                            object, spec, G_CALLBACK (intern_string_modified));
+      else
+        connect_controller (G_OBJECT (prop_edit), "changed",
+                            object, spec, G_CALLBACK (string_modified));
     }
   else if (type == G_TYPE_PARAM_BOOLEAN)
     {
@@ -1050,6 +1118,23 @@ property_editor (GObject                *object,
 
       connect_controller (G_OBJECT (prop_edit), "notify::font-desc",
                           object, spec, G_CALLBACK (font_modified));
+    }
+  else if (type == G_TYPE_PARAM_BOXED &&
+           G_PARAM_SPEC_VALUE_TYPE (spec) == G_TYPE_STRV)
+    {
+      prop_edit = g_object_new (gtk_inspector_strv_editor_get_type (),
+                                "visible", TRUE,
+                                NULL);
+
+      g_object_connect_property (object, spec,
+                                 G_CALLBACK (strv_changed),
+                                 prop_edit, G_OBJECT (prop_edit));
+
+      connect_controller (G_OBJECT (prop_edit), "changed",
+                          object, spec, G_CALLBACK (strv_modified));
+
+      gtk_widget_set_halign (prop_edit, GTK_ALIGN_START);
+      gtk_widget_set_valign (prop_edit, GTK_ALIGN_CENTER);
     }
   else
     {

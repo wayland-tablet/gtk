@@ -68,6 +68,7 @@
 #include "gtkpopover.h"
 #include "gtktoolbar.h"
 #include "gtkmagnifierprivate.h"
+#include "gtkcssnodeprivate.h"
 
 #include "a11y/gtkentryaccessible.h"
 
@@ -112,6 +113,34 @@
  * able to use a mouse or other pointing device. It is therefore recommended
  * that any such functionality should also be available by other means, e.g.
  * via the context menu of the entry.
+ *
+ * # CSS nodes
+ *
+ * |[<!-- language="plain" -->
+ * entry
+ * ├── image.left
+ * ├── image.right
+ * ├── [selection]
+ * ╰── [progress[.pulse]]
+ * ]|
+ *
+ * GtkEntry has a main node with the name entry. Depending on the properties
+ * of the entry, the style classes .read-only and .flat may appear. The style
+ * classes .warning and .error may also be used with entries.
+ *
+ * When the entry shows icons, it adds subnodes with the name image and the
+ * style class .left or .right, depending on where the icon appears.
+ *
+ * When the entry has a selection, it adds a subnode with the name sleciton.
+ *
+ * When the entry shows progress, it adds a subnode with the name progress.
+ * The node has the style class .pulse when the shown progress is pulsing.
+ *
+ * When touch is used and touch selection handles are shown, they are using
+ * CSS nodes with name cursor-handle. They get the .top or .bottom style class
+ * depending on where they are shown in relation to the selection. If there is
+ * just a single handle for the text cursor, it gets the style class
+ * .insertion-cursor.
  */
 
 
@@ -174,6 +203,9 @@ struct _GtkEntryPrivate
   GtkGesture    *drag_gesture;
   GtkGesture    *multipress_gesture;
 
+  GtkCssNode    *selection_node;
+  GtkCssNode    *progress_node;
+
   gfloat        xalign;
 
   gint          ascent;                     /* font ascent in pango units  */
@@ -218,7 +250,6 @@ struct _GtkEntryPrivate
   guint         cursor_visible          : 1;
   guint         editing_canceled        : 1; /* Only used by GtkCellRendererText */
   guint         in_click                : 1; /* Flag so we don't select all when clicking in entry to focus in */
-  guint         is_cell_renderer        : 1;
   guint         invisible_char_set      : 1;
   guint         mouse_cursor_obscured   : 1;
   guint         need_im_reset           : 1;
@@ -250,6 +281,7 @@ struct _EntryIconInfo
   GtkIconHelper *icon_helper;
   GdkEventSequence *current_sequence;
   GdkDevice *device;
+  GtkCssNode *css_node;
 };
 
 struct _GtkEntryPasswordHint
@@ -1464,13 +1496,16 @@ gtk_entry_class_init (GtkEntryClass *class)
    * icons prelight on mouseover.
    *
    * Since: 2.16
+   *
+   * Deprecated: 3.20: Use CSS to control the appearance of prelighted icons;
+   *     the value of this style property is ignored.
    */
   gtk_widget_class_install_style_property (widget_class,
                                            g_param_spec_boolean ("icon-prelight",
                                                                  P_("Icon Prelight"),
                                                                  P_("Whether activatable icons should prelight when hovered"),
                                                                  TRUE,
-                                                                 GTK_PARAM_READABLE|G_PARAM_EXPLICIT_NOTIFY));
+                                                                 GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
   /**
    * GtkEntry:progress-border:
@@ -1489,7 +1524,7 @@ gtk_entry_class_init (GtkEntryClass *class)
                                                                P_("Border around the progress bar"),
                                                                GTK_TYPE_BORDER,
                                                                GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
-  
+
   /**
    * GtkEntry:invisible-char:
    *
@@ -2006,6 +2041,7 @@ gtk_entry_class_init (GtkEntryClass *class)
                                                                G_PARAM_DEPRECATED));
 
   gtk_widget_class_set_accessible_type (widget_class, GTK_TYPE_ENTRY_ACCESSIBLE);
+  gtk_widget_class_set_css_name (widget_class, "entry");
 }
 
 static void
@@ -2640,7 +2676,6 @@ find_invisible_char (GtkWidget *widget)
 static void
 gtk_entry_init (GtkEntry *entry)
 {
-  GtkStyleContext *context;
   GtkEntryPrivate *priv;
 
   entry->priv = gtk_entry_get_instance_private (entry);
@@ -2654,7 +2689,6 @@ gtk_entry_init (GtkEntry *entry)
   priv->dnd_position = -1;
   priv->width_chars = -1;
   priv->max_width_chars = -1;
-  priv->is_cell_renderer = FALSE;
   priv->editing_canceled = FALSE;
   priv->truncate_multiline = FALSE;
   priv->shadow_type = GTK_SHADOW_IN;
@@ -2683,9 +2717,6 @@ gtk_entry_init (GtkEntry *entry)
 		    G_CALLBACK (gtk_entry_retrieve_surrounding_cb), entry);
   g_signal_connect (priv->im_context, "delete-surrounding",
 		    G_CALLBACK (gtk_entry_delete_surrounding_cb), entry);
-
-  context = gtk_widget_get_style_context (GTK_WIDGET (entry));
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_ENTRY);
 
   gtk_entry_update_cached_style_values (entry);
 
@@ -2717,7 +2748,7 @@ gtk_entry_ensure_magnifier (GtkEntry *entry)
   _gtk_magnifier_set_magnification (GTK_MAGNIFIER (priv->magnifier), 2.0);
   priv->magnifier_popover = gtk_popover_new (GTK_WIDGET (entry));
   gtk_style_context_add_class (gtk_widget_get_style_context (priv->magnifier_popover),
-                               GTK_STYLE_CLASS_OSD);
+                               "magnifier");
   gtk_popover_set_modal (GTK_POPOVER (priv->magnifier_popover), FALSE);
   gtk_container_add (GTK_CONTAINER (priv->magnifier_popover),
                      priv->magnifier);
@@ -2742,47 +2773,6 @@ gtk_entry_ensure_text_handles (GtkEntry *entry)
                     G_CALLBACK (gtk_entry_handle_drag_finished), entry);
 }
 
-static void
-gtk_entry_prepare_context_for_icon (GtkEntry             *entry,
-                                    GtkStyleContext      *context,
-                                    GtkEntryIconPosition  icon_pos)
-{
-  GtkEntryPrivate *priv = entry->priv;
-  EntryIconInfo *icon_info = priv->icons[icon_pos];
-  GtkWidget *widget;
-  GtkStateFlags state;
-
-  widget = GTK_WIDGET (entry);
-  state = gtk_widget_get_state_flags (widget);
-
-  state &= ~(GTK_STATE_FLAG_PRELIGHT);
-
-  if ((state & GTK_STATE_FLAG_INSENSITIVE) || icon_info->insensitive)
-    state |= GTK_STATE_FLAG_INSENSITIVE;
-  else if (icon_info->prelight)
-    state |= GTK_STATE_FLAG_PRELIGHT;
-
-  gtk_style_context_save (context);
-
-  gtk_style_context_set_state (context, state);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_IMAGE);
-
-  if (gtk_widget_get_direction (GTK_WIDGET (entry)) == GTK_TEXT_DIR_RTL) 
-    {
-      if (icon_pos == GTK_ENTRY_ICON_PRIMARY)
-        gtk_style_context_add_class (context, GTK_STYLE_CLASS_RIGHT);
-      else
-        gtk_style_context_add_class (context, GTK_STYLE_CLASS_LEFT);
-    }
-  else
-    {
-      if (icon_pos == GTK_ENTRY_ICON_PRIMARY)
-        gtk_style_context_add_class (context, GTK_STYLE_CLASS_LEFT);
-      else
-        gtk_style_context_add_class (context, GTK_STYLE_CLASS_RIGHT);
-    }
-}
-
 static gint
 get_icon_width (GtkEntry             *entry,
                 GtkEntryIconPosition  icon_pos)
@@ -2798,7 +2788,7 @@ get_icon_width (GtkEntry             *entry,
     return 0;
 
   context = gtk_widget_get_style_context (GTK_WIDGET (entry));
-  gtk_entry_prepare_context_for_icon (entry, context, icon_pos);
+  gtk_style_context_save_to_node (context, icon_info->css_node);
   state = gtk_style_context_get_state (context);
   gtk_style_context_get_padding (context, state, &padding);
 
@@ -3166,13 +3156,120 @@ realize_icon_info (GtkWidget            *widget,
 
 }
 
+static void
+update_icon_style (GtkWidget            *widget,
+                   GtkEntryIconPosition  icon_pos)
+{
+  GtkEntry *entry = GTK_ENTRY (widget);
+  GtkEntryPrivate *priv = entry->priv;
+  EntryIconInfo *icon_info = priv->icons[icon_pos];
+  const gchar *sides[2] = { GTK_STYLE_CLASS_LEFT, GTK_STYLE_CLASS_RIGHT };
+
+  if (icon_info == NULL)
+    return;
+
+  if (gtk_widget_get_direction (widget) == GTK_TEXT_DIR_RTL)
+    icon_pos = 1 - icon_pos;
+
+  gtk_css_node_add_class (icon_info->css_node, g_quark_from_static_string (sides[icon_pos]));
+  gtk_css_node_remove_class (icon_info->css_node, g_quark_from_static_string (sides[1 - icon_pos]));
+}
+
+static void
+update_icon_state (GtkWidget            *widget,
+                   GtkEntryIconPosition  icon_pos)
+{
+  GtkEntry *entry = GTK_ENTRY (widget);
+  GtkEntryPrivate *priv = entry->priv;
+  EntryIconInfo *icon_info = priv->icons[icon_pos];
+  GtkStateFlags state;
+
+  if (icon_info == NULL)
+    return;
+
+  state = gtk_widget_get_state_flags (widget);
+  state &= ~GTK_STATE_FLAG_PRELIGHT;
+
+  if ((state & GTK_STATE_FLAG_INSENSITIVE) || icon_info->insensitive)
+    state |= GTK_STATE_FLAG_INSENSITIVE;
+  else if (icon_info->prelight)
+    state |= GTK_STATE_FLAG_PRELIGHT;
+
+  gtk_css_node_set_state (icon_info->css_node, state);
+}
+
+static void
+update_node_state (GtkEntry *entry)
+{
+  GtkEntryPrivate *priv = entry->priv;
+  GtkStateFlags state;
+
+  state = gtk_widget_get_state_flags (GTK_WIDGET (entry));
+
+  if (priv->progress_node)
+    gtk_css_node_set_state (priv->progress_node, state);
+  if (priv->selection_node)
+    gtk_css_node_set_state (priv->selection_node, state);
+}
+
+static GtkCssNode *
+get_entry_node (GtkWidget *widget)
+{
+  if (GTK_IS_SPIN_BUTTON (widget))
+    {
+      const gchar *name;
+      GtkCssNode *node;
+
+      name = I_("entry");
+      node = gtk_css_node_get_first_child (gtk_widget_get_css_node (widget));
+      do {
+        if (gtk_css_node_get_name (node) == name)
+          return node;
+      } while ((node = gtk_css_node_get_next_sibling (node)) != NULL);
+    }
+
+  return gtk_widget_get_css_node (widget);
+}
+
+static void
+update_node_ordering (GtkEntry *entry)
+{
+  GtkEntryPrivate *priv = entry->priv;
+  EntryIconInfo *icon_info;
+  GtkEntryIconPosition icon_pos;
+  GtkCssNode *sibling, *parent;
+
+  if (priv->progress_node)
+    {
+      parent = gtk_css_node_get_parent (priv->progress_node);
+      sibling = gtk_css_node_get_last_child (parent);
+      if (priv->progress_node != sibling)
+        gtk_css_node_insert_after (parent, priv->progress_node, sibling);
+    }
+
+  if (gtk_widget_get_direction (GTK_WIDGET (entry)) == GTK_TEXT_DIR_RTL)
+    icon_pos = GTK_ENTRY_ICON_SECONDARY;
+  else
+    icon_pos = GTK_ENTRY_ICON_PRIMARY;
+
+  icon_info = priv->icons[icon_pos];
+  if (icon_info && icon_info->css_node)
+    {
+      parent = gtk_css_node_get_parent (icon_info->css_node);
+      sibling = gtk_css_node_get_first_child (parent);
+      if (icon_info->css_node != sibling)
+        gtk_css_node_insert_before (parent, icon_info->css_node, sibling);
+    }
+}
+
 static EntryIconInfo*
-construct_icon_info (GtkWidget            *widget, 
+construct_icon_info (GtkWidget            *widget,
                      GtkEntryIconPosition  icon_pos)
 {
   GtkEntry *entry = GTK_ENTRY (widget);
   GtkEntryPrivate *priv = entry->priv;
   EntryIconInfo *icon_info;
+  GtkCssNode *widget_node;
 
   g_return_val_if_fail (priv->icons[icon_pos] == NULL, NULL);
 
@@ -3181,6 +3278,16 @@ construct_icon_info (GtkWidget            *widget,
 
   icon_info->icon_helper = _gtk_icon_helper_new ();
   _gtk_icon_helper_set_force_scale_pixbuf (icon_info->icon_helper, TRUE);
+
+  widget_node = get_entry_node (widget);
+  icon_info->css_node = gtk_css_node_new ();
+  gtk_css_node_set_name (icon_info->css_node, I_("image"));
+  gtk_css_node_set_parent (icon_info->css_node, widget_node);
+  update_icon_state (widget, icon_pos);
+  update_icon_style (widget, icon_pos);
+  g_object_unref (icon_info->css_node);
+
+  update_node_ordering (entry);
 
   if (gtk_widget_get_realized (widget))
     realize_icon_info (widget, icon_pos);
@@ -3588,45 +3695,25 @@ gtk_entry_get_frame_size (GtkEntry *entry,
                           gint     *width,
                           gint     *height)
 {
-  GtkEntryPrivate *priv = entry->priv;
   GtkAllocation allocation;
   GtkWidget *widget = GTK_WIDGET (entry);
-  gint baseline;
   gint req_height, req_baseline, unused;
 
   gtk_entry_get_preferred_height_and_baseline_for_width (widget, -1, &req_height, &unused, &req_baseline, &unused);
 
   gtk_widget_get_allocation (widget, &allocation);
-  baseline = gtk_widget_get_allocated_baseline (widget);
 
   if (x)
     *x = allocation.x;
 
   if (y)
-    {
-      if (priv->is_cell_renderer)
-        *y = 0;
-      else
-        {
-          if (baseline == -1)
-            *y = (allocation.height - req_height) / 2;
-          else
-            *y = baseline - req_baseline;
-        }
-
-      *y += allocation.y;
-    }
+    *y = allocation.y;
 
   if (width)
     *width = allocation.width;
 
   if (height)
-    {
-      if (priv->is_cell_renderer)
-        *height = allocation.height;
-      else
-        *height = req_height;
-    }
+    *height = allocation.height;
 }
 
 static void
@@ -3688,7 +3775,6 @@ should_prelight (GtkEntry             *entry,
 {
   GtkEntryPrivate *priv = entry->priv;
   EntryIconInfo *icon_info = priv->icons[icon_pos];
-  gboolean prelight;
 
   if (!icon_info)
     return FALSE;
@@ -3699,11 +3785,7 @@ should_prelight (GtkEntry             *entry,
   if (icon_info->pressed)
     return FALSE;
 
-  gtk_widget_style_get (GTK_WIDGET (entry),
-                        "icon-prelight", &prelight,
-                        NULL);
-
-  return prelight;
+  return TRUE;
 }
 
 static void
@@ -3734,7 +3816,7 @@ draw_icon (GtkWidget            *widget,
   gtk_cairo_transform_to_window (cr, widget, icon_info->window);
 
   context = gtk_widget_get_style_context (widget);
-  gtk_entry_prepare_context_for_icon (entry, context, icon_pos);
+  gtk_style_context_save_to_node (context, icon_info->css_node);
   _gtk_icon_helper_get_size (icon_info->icon_helper, context,
                              &pix_width, &pix_height);
   state = gtk_style_context_get_state (context);
@@ -3770,37 +3852,24 @@ gtk_entry_draw_frame (GtkWidget       *widget,
    * width equals widget->window's width
    * http://bugzilla.gnome.org/show_bug.cgi?id=466000
    */
-  if (GTK_IS_SPIN_BUTTON (widget))
+  if (GTK_IS_SPIN_BUTTON (widget) &&
+      gtk_orientable_get_orientation (GTK_ORIENTABLE (widget)) == GTK_ORIENTATION_VERTICAL)
     {
       GtkBorder borders;
 
-      gtk_entry_get_text_area_size (GTK_ENTRY (widget), &x, NULL, &width, NULL);
+      gtk_entry_get_text_area_size (GTK_ENTRY (widget), NULL, &y, NULL, &height);
       _gtk_entry_get_borders (GTK_ENTRY (widget), &borders);
 
-      x -= borders.left;
-      width += borders.left + borders.right;
+      y -= borders.top;
+      height += borders.top + borders.bottom;
     }
 
-  gtk_render_background (context, cr,
-                         x, y, width, height);
-  gtk_render_frame (context, cr,
-		    x, y, width, height);
+  gtk_render_background (context, cr, x, y, width, height);
+  gtk_render_frame (context, cr, x, y, width, height);
 
   gtk_entry_draw_progress (widget, context, cr);
 
   cairo_restore (cr);
-}
-
-static void
-gtk_entry_prepare_context_for_progress (GtkEntry *entry,
-                                        GtkStyleContext *context)
-{
-  GtkEntryPrivate *private = entry->priv;
-
-  gtk_style_context_save (context);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_PROGRESSBAR);
-  if (private->progress_pulse_mode)
-    gtk_style_context_add_class (context, GTK_STYLE_CLASS_PULSE);
 }
 
 static void
@@ -3813,25 +3882,22 @@ get_progress_area (GtkWidget *widget,
   GtkEntry *entry = GTK_ENTRY (widget);
   GtkEntryPrivate *private = entry->priv;
   GtkStyleContext *context;
-  GtkBorder margin, border, entry_borders;
+  GtkBorder border, entry_borders;
   gint frame_width, text_area_width, text_area_height;
-  GtkStateFlags state;
 
   context = gtk_widget_get_style_context (widget);
   _gtk_entry_get_borders (entry, &entry_borders);
   get_text_area_size (entry,
-                      NULL, NULL,
+                      x, y,
                       &text_area_width, &text_area_height);
   get_frame_size (entry, FALSE,
                   NULL, NULL,
                   &frame_width, NULL);
 
-  *x = 0;
-  *y = 0;
+  *x -= entry_borders.left;
+  *y -= entry_borders.top;
   *width = text_area_width + entry_borders.left + entry_borders.right;
   *height = text_area_height + entry_borders.top + entry_borders.bottom;
-
-  state = gtk_style_context_get_state (context);
 
   /* if the text area got resized by a subclass, subtract the left/right
    * border width, so that the progress bar won't extend over the resized
@@ -3839,7 +3905,9 @@ get_progress_area (GtkWidget *widget,
    */
   if (frame_width > *width)
     {
-      gtk_style_context_get_border (context, state, &border);
+      gtk_style_context_get_border (context,
+                                    gtk_style_context_get_state (context),
+                                    &border);
       if (gtk_widget_get_direction (GTK_WIDGET (entry)) == GTK_TEXT_DIR_RTL)
         {
           *x = (frame_width - *width) + border.left;
@@ -3851,15 +3919,21 @@ get_progress_area (GtkWidget *widget,
         }
     }
 
-  gtk_entry_prepare_context_for_progress (entry, context);
-  gtk_style_context_get_margin (context, state, &margin);
+  if (private->progress_node)
+    {
+      GtkBorder margin;
 
-  gtk_style_context_restore (context);
+      gtk_style_context_save_to_node (context, private->progress_node);
+      gtk_style_context_get_margin (context,
+                                    gtk_style_context_get_state (context),
+                                    &margin);
+      gtk_style_context_restore (context);
 
-  *x += margin.left;
-  *y += margin.top;
-  *width -= margin.left + margin.right;
-  *height -= margin.top + margin.bottom;
+      *x += margin.left;
+      *y += margin.top;
+      *width -= margin.left + margin.right;
+      *height -= margin.top + margin.bottom;
+    }
 
   if (private->progress_pulse_mode)
     {
@@ -3904,11 +3978,10 @@ gtk_entry_draw_progress (GtkWidget       *widget,
 
   if ((width <= 0) || (height <= 0))
     return;
- 
-  gtk_entry_prepare_context_for_progress (entry, context);
+
+  gtk_style_context_save_to_node (context, entry->priv->progress_node);
   gtk_render_background (context, cr, x, y, width, height);
   gtk_render_frame (context, cr, x, y, width, height);
-
   gtk_style_context_restore (context);
 }
 
@@ -3921,8 +3994,7 @@ gtk_entry_draw (GtkWidget *widget,
   GtkEntryPrivate *priv = entry->priv;
   int i;
 
-  if (gtk_cairo_should_draw_window (cr,
-                                    gtk_widget_get_window (widget)))
+  if (gtk_cairo_should_draw_window (cr, gtk_widget_get_window (widget)))
     {
       context = gtk_widget_get_style_context (widget);
 
@@ -3961,7 +4033,7 @@ gtk_entry_draw (GtkWidget *widget,
 }
 
 static gint
-gtk_entry_enter_notify (GtkWidget *widget,
+gtk_entry_enter_notify (GtkWidget        *widget,
                         GdkEventCrossing *event)
 {
   GtkEntry *entry = GTK_ENTRY (widget);
@@ -3977,6 +4049,7 @@ gtk_entry_enter_notify (GtkWidget *widget,
           if (should_prelight (entry, i))
             {
               icon_info->prelight = TRUE;
+              update_icon_state (widget, i);
               gtk_widget_queue_draw (widget);
             }
 
@@ -4008,6 +4081,7 @@ gtk_entry_leave_notify (GtkWidget        *widget,
           if (should_prelight (entry, i))
             {
               icon_info->prelight = FALSE;
+              update_icon_state (widget, i);
               gtk_widget_queue_draw (widget);
             }
 
@@ -4253,6 +4327,7 @@ gtk_entry_event (GtkWidget *widget,
       if (should_prelight (GTK_ENTRY (widget), i))
         {
           icon_info->prelight = FALSE;
+          update_icon_state (widget, i);
           gtk_widget_queue_draw (widget);
         }
 
@@ -4306,6 +4381,7 @@ gtk_entry_event (GtkWidget *widget,
           y < gdk_window_get_height (icon_info->window))
         {
           icon_info->prelight = TRUE;
+          update_icon_state (widget, i);
           gtk_widget_queue_draw (widget);
         }
 
@@ -4778,9 +4854,11 @@ gtk_entry_obscure_mouse_cursor (GtkEntry *entry)
   if (priv->mouse_cursor_obscured)
     return;
 
-  set_invisible_cursor (priv->text_area);
-
-  priv->mouse_cursor_obscured = TRUE;
+  if (priv->text_area)
+    {
+      set_invisible_cursor (priv->text_area);
+      priv->mouse_cursor_obscured = TRUE;
+    }
 }
 
 static gint
@@ -5006,6 +5084,11 @@ gtk_entry_direction_changed (GtkWidget        *widget,
 
   gtk_entry_recompute (entry);
 
+  update_icon_style (widget, GTK_ENTRY_ICON_PRIMARY);
+  update_icon_style (widget, GTK_ENTRY_ICON_SECONDARY);
+
+  update_node_ordering (entry);
+
   GTK_WIDGET_CLASS (gtk_entry_parent_class)->direction_changed (widget, previous_dir);
 }
 
@@ -5039,6 +5122,10 @@ gtk_entry_state_flags_changed (GtkWidget     *widget,
       /* Clear any selection */
       gtk_editable_select_region (GTK_EDITABLE (entry), priv->current_pos, priv->current_pos);
     }
+
+  update_node_state (entry);
+  update_icon_state (widget, GTK_ENTRY_ICON_PRIMARY);
+  update_icon_state (widget, GTK_ENTRY_ICON_SECONDARY);
 
   gtk_entry_update_cached_style_values (entry);
 }
@@ -5260,11 +5347,6 @@ static void
 gtk_entry_start_editing (GtkCellEditable *cell_editable,
 			 GdkEvent        *event)
 {
-  GtkEntry *entry = GTK_ENTRY (cell_editable);
-  GtkEntryPrivate *priv = entry->priv;
-
-  priv->is_cell_renderer = TRUE;
-
   g_signal_connect (cell_editable, "activate",
 		    G_CALLBACK (gtk_cell_editable_entry_activated), NULL);
   g_signal_connect (cell_editable, "key-press-event",
@@ -6082,6 +6164,29 @@ gtk_entry_set_positions (GtkEntry *entry,
 
   g_object_thaw_notify (G_OBJECT (entry));
 
+  if (priv->current_pos != priv->selection_bound)
+    {
+      if (!priv->selection_node)
+        {
+          GtkCssNode *widget_node;
+
+          widget_node = get_entry_node (GTK_WIDGET (entry));
+          priv->selection_node = gtk_css_node_new ();
+          gtk_css_node_set_name (priv->selection_node, I_("selection"));
+          gtk_css_node_set_parent (priv->selection_node, widget_node);
+          gtk_css_node_set_state (priv->selection_node, gtk_css_node_get_state (widget_node));
+          g_object_unref (priv->selection_node);
+        }
+    }
+  else
+    {
+      if (priv->selection_node)
+        {
+          gtk_css_node_set_parent (priv->selection_node, NULL);
+          priv->selection_node = NULL;
+        }
+    }
+
   if (changed)
     {
       gtk_entry_move_adjustments (entry);
@@ -6389,13 +6494,13 @@ draw_text_with_color (GtkEntry *entry,
 {
   GtkEntryPrivate *priv = entry->priv;
   PangoLayout *layout = gtk_entry_ensure_layout (entry, TRUE);
-  GtkWidget *widget;
   gint x, y;
   gint start_pos, end_pos;
-
-  widget = GTK_WIDGET (entry);
+  GtkAllocation allocation;
 
   cairo_save (cr);
+
+  gtk_widget_get_allocation (GTK_WIDGET (entry), &allocation);
 
   get_layout_position (entry, &x, &y);
 
@@ -6411,42 +6516,30 @@ draw_text_with_color (GtkEntry *entry,
       gint *ranges;
       gint n_ranges, i;
       PangoRectangle logical_rect;
-      GdkRGBA selection_color, text_color;
+      GdkRGBA text_color;
       GtkStyleContext *context;
-      GtkStateFlags state;
 
-      context = gtk_widget_get_style_context (widget);
+      context = gtk_widget_get_style_context (GTK_WIDGET (entry));
+      gtk_style_context_save_to_node (context, priv->selection_node);
+
       pango_layout_get_pixel_extents (layout, NULL, &logical_rect);
       gtk_entry_get_pixel_ranges (entry, &ranges, &n_ranges);
-
-      gtk_style_context_save (context);
-      state = gtk_style_context_get_state (context);
-      state |= GTK_STATE_FLAG_SELECTED;
-      gtk_style_context_set_state (context, state);
-
-G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-      gtk_style_context_get_background_color (context, state, &selection_color);
-G_GNUC_END_IGNORE_DEPRECATIONS
-      gtk_style_context_get_color (context, state, &text_color);
-      gtk_style_context_restore (context);
-
       for (i = 0; i < n_ranges; ++i)
         cairo_rectangle (cr,
-                         - priv->scroll_offset + ranges[2 * i],
-			 y,
-			 ranges[2 * i + 1],
-			 logical_rect.height);
-
+                         - priv->scroll_offset + ranges[2 * i], y,
+			 ranges[2 * i + 1], logical_rect.height);
       cairo_clip (cr);
-	  
-      gdk_cairo_set_source_rgba (cr, &selection_color);
-      cairo_paint (cr);
+
+      gtk_render_background (context, cr,
+                             0, 0, allocation.width, allocation.height);
 
       cairo_move_to (cr, x, y);
+      gtk_style_context_get_color (context, gtk_style_context_get_state (context), &text_color);
       gdk_cairo_set_source_rgba (cr, &text_color);
       pango_cairo_show_layout (cr, layout);
-  
+
       g_free (ranges);
+      gtk_style_context_restore (context);
     }
   cairo_restore (cr);
 }
@@ -6457,8 +6550,8 @@ gtk_entry_draw_text (GtkEntry *entry,
 {
   GtkEntryPrivate *priv = entry->priv;
   GtkWidget *widget = GTK_WIDGET (entry);
-  GtkStateFlags state = 0;
-  GdkRGBA text_color, bar_text_color;
+  GdkRGBA text_color;
+  GdkRGBA bar_text_color = { 0 };
   GtkStyleContext *context;
   gint width, height;
   gint progress_x, progress_y, progress_width, progress_height;
@@ -6468,15 +6561,21 @@ gtk_entry_draw_text (GtkEntry *entry,
   if (gtk_entry_get_display_mode (entry) == DISPLAY_BLANK)
     return;
 
-  state = gtk_widget_get_state_flags (widget);
   context = gtk_widget_get_style_context (widget);
 
-  gtk_style_context_get_color (context, state, &text_color);
+  gtk_style_context_get_color (context,
+                               gtk_style_context_get_state (context),
+                               &text_color);
 
   /* Get foreground color for progressbars */
-  gtk_entry_prepare_context_for_progress (entry, context);
-  gtk_style_context_get_color (context, state, &bar_text_color);
-  gtk_style_context_restore (context);
+  if (priv->progress_node)
+    {
+      gtk_style_context_save_to_node (context, priv->progress_node);
+      gtk_style_context_get_color (context,
+                                   gtk_style_context_get_state (context),
+                                   &bar_text_color);
+      gtk_style_context_restore (context);
+    }
 
   get_progress_area (widget,
                      &progress_x, &progress_y,
@@ -6490,9 +6589,10 @@ gtk_entry_draw_text (GtkEntry *entry,
   cairo_clip (cr);
 
   /* If the color is the same, or the progress area has a zero
-   * size, then we only need to draw once. */
-  if (gdk_rgba_equal (&text_color, &bar_text_color) ||
-      ((progress_width == 0) || (progress_height == 0)))
+   * size, then we only need to draw once.
+   */
+  if (progress_width == 0 || progress_height == 0 ||
+      gdk_rgba_equal (&text_color, &bar_text_color))
     {
       draw_text_with_color (entry, cr, &text_color);
     }
@@ -6595,12 +6695,12 @@ gtk_entry_draw_cursor (GtkEntry  *entry,
 
       if (!block_at_line_end)
         {
-          GtkStateFlags state;
           GdkRGBA color;
 
-          state = gtk_widget_get_state_flags (widget);
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-          gtk_style_context_get_background_color (context, state, &color);
+          gtk_style_context_get_background_color (context,
+                                                  gtk_style_context_get_state (context),
+                                                  &color);
 G_GNUC_END_IGNORE_DEPRECATIONS
 
           gdk_cairo_rectangle (cr, &rect);
@@ -7498,7 +7598,7 @@ gtk_entry_ensure_pixbuf (GtkEntry             *entry,
   GdkPixbuf *pix;
 
   context = gtk_widget_get_style_context (GTK_WIDGET (entry));
-  gtk_entry_prepare_context_for_icon (entry, context, icon_pos);
+  gtk_style_context_save_to_node (context, icon_info->css_node);
 
   pix = _gtk_icon_helper_ensure_pixbuf (icon_info->icon_helper,
                                         context);
@@ -8979,6 +9079,7 @@ gtk_entry_set_icon_sensitive (GtkEntry             *entry,
       if (gtk_widget_get_realized (GTK_WIDGET (entry)))
         update_cursors (GTK_WIDGET (entry));
 
+      update_icon_state (GTK_WIDGET (entry), icon_pos);
       gtk_widget_queue_draw (GTK_WIDGET (entry));
 
       g_object_notify_by_pspec (G_OBJECT (entry),
@@ -9770,7 +9871,7 @@ append_bubble_action (GtkEntry     *entry,
   GtkWidget *item, *image;
 
   item = gtk_button_new ();
-  gtk_button_set_focus_on_click (GTK_BUTTON (item), FALSE);
+  gtk_widget_set_focus_on_click (item, FALSE);
   image = gtk_image_new_from_icon_name (icon_name, GTK_ICON_SIZE_MENU);
   gtk_widget_show (image);
   gtk_container_add (GTK_CONTAINER (item), image);
@@ -10640,23 +10741,46 @@ tick_cb (GtkWidget     *widget,
 }
 
 static void
+gtk_entry_ensure_progress_node (GtkEntry *entry)
+{
+  GtkEntryPrivate *priv = entry->priv;
+  GtkCssNode *widget_node;
+
+  if (priv->progress_node)
+    return;
+
+  widget_node = get_entry_node (GTK_WIDGET (entry));
+  priv->progress_node = gtk_css_node_new ();
+  gtk_css_node_set_name (priv->progress_node, I_("progress"));
+  gtk_css_node_set_parent (priv->progress_node, widget_node);
+  gtk_css_node_set_state (priv->progress_node, gtk_css_node_get_state (widget_node));
+  g_object_unref (priv->progress_node);
+
+  update_node_ordering (entry);
+}
+
+static void
 gtk_entry_start_pulse_mode (GtkEntry *entry)
 {
   GtkEntryPrivate *priv = entry->priv;
 
-  if (!priv->progress_pulse_mode)
-    {
-      priv->progress_pulse_mode = TRUE;
-      priv->tick_id = gtk_widget_add_tick_callback (GTK_WIDGET (entry), tick_cb, NULL, NULL);
+  if (priv->progress_pulse_mode)
+    return;
 
-      priv->progress_fraction = 0.0;
-      priv->progress_pulse_way_back = FALSE;
-      priv->progress_pulse_current = 0.0;
+  gtk_entry_ensure_progress_node (entry);
+  gtk_css_node_set_visible (priv->progress_node, TRUE);
+  gtk_css_node_add_class (priv->progress_node, g_quark_from_static_string (GTK_STYLE_CLASS_PULSE));
 
-      priv->pulse2 = 0;
-      priv->pulse1 = 0;
-      priv->frame1 = 0;
-    }
+  priv->progress_pulse_mode = TRUE;
+  priv->tick_id = gtk_widget_add_tick_callback (GTK_WIDGET (entry), tick_cb, NULL, NULL);
+
+  priv->progress_fraction = 0.0;
+  priv->progress_pulse_way_back = FALSE;
+  priv->progress_pulse_current = 0.0;
+
+  priv->pulse2 = 0;
+  priv->pulse1 = 0;
+  priv->frame1 = 0;
 }
 
 static void
@@ -10666,6 +10790,9 @@ gtk_entry_stop_pulse_mode (GtkEntry *entry)
 
   if (priv->progress_pulse_mode)
     {
+      gtk_css_node_set_visible (priv->progress_node, FALSE);
+      gtk_css_node_remove_class (priv->progress_node, g_quark_from_static_string (GTK_STYLE_CLASS_PULSE));
+
       priv->progress_pulse_mode = FALSE;
       gtk_widget_remove_tick_callback (GTK_WIDGET (entry), priv->tick_id);
       priv->tick_id = 0;
@@ -10707,6 +10834,10 @@ gtk_entry_set_progress_fraction (GtkEntry *entry,
 
   widget = GTK_WIDGET (entry);
   private = entry->priv;
+
+  gtk_entry_ensure_progress_node (entry);
+  gtk_css_node_set_visible (private->progress_node, TRUE);
+  gtk_css_node_remove_class (private->progress_node, g_quark_from_static_string (GTK_STYLE_CLASS_PULSE));
 
   was_pulse = private->progress_pulse_mode;
 
@@ -10936,24 +11067,6 @@ keymap_state_changed (GdkKeymap *keymap,
     show_capslock_feedback (entry, text);
   else
     remove_capslock_feedback (entry);
-}
-
-/*
- * _gtk_entry_set_is_cell_renderer:
- * @entry: a #GtkEntry
- * @is_cell_renderer: new value
- *
- * This is a helper function for GtkComboBox. A GtkEntry in a GtkComboBox
- * is supposed to behave like a GtkCellEditable when placed in a combo box.
- *
- * I.e take up its allocation and get GtkEntry->is_cell_renderer = TRUE.
- *
- */
-void
-_gtk_entry_set_is_cell_renderer (GtkEntry *entry,
-                                 gboolean  is_cell_renderer)
-{
-  entry->priv->is_cell_renderer = is_cell_renderer;
 }
 
 /**

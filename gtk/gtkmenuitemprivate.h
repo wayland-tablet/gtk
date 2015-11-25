@@ -21,6 +21,7 @@
 #include <gtk/gtkmenuitem.h>
 #include <gtk/deprecated/gtkaction.h>
 #include <gtk/gtkactionhelper.h>
+#include <gtk/gtkcssnodeprivate.h>
 
 G_BEGIN_DECLS
 
@@ -39,7 +40,8 @@ struct _GtkMenuItemPrivate
   GtkAction *action;
   GtkActionHelper *action_helper;
 
-  guint show_submenu_indicator : 1;
+  GtkCssNode *arrow_node;
+
   guint submenu_placement      : 1;
   guint submenu_direction      : 1;
   guint right_justify          : 1;

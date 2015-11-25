@@ -125,7 +125,7 @@ get_css_padding_and_border (GtkWidget *widget,
   GtkBorder tmp;
 
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
 
   gtk_style_context_get_padding (context, state, border);
   gtk_style_context_get_border (context, state, &tmp);
@@ -280,7 +280,7 @@ void
 _gtk_header_bar_update_window_buttons (GtkHeaderBar *bar)
 {
   GtkHeaderBarPrivate *priv = gtk_header_bar_get_instance_private (bar);
-  GtkWidget *widget = GTK_WIDGET (bar);
+  GtkWidget *widget = GTK_WIDGET (bar), *toplevel;
   GtkWindow *window;
   GtkTextDirection direction;
   gchar *layout_desc;
@@ -290,7 +290,8 @@ _gtk_header_bar_update_window_buttons (GtkHeaderBar *bar)
   gboolean shown_by_shell;
   GdkWindowTypeHint type_hint;
 
-  if (!gtk_widget_get_realized (widget))
+  toplevel = gtk_widget_get_toplevel (widget);
+  if (!gtk_widget_is_toplevel (toplevel))
     return;
 
   if (priv->titlebar_start_box)
@@ -324,7 +325,7 @@ _gtk_header_bar_update_window_buttons (GtkHeaderBar *bar)
       layout_desc = g_strdup (priv->decoration_layout);
     }
 
-  window = GTK_WINDOW (gtk_widget_get_toplevel (widget));
+  window = GTK_WINDOW (toplevel);
 
   if (!shown_by_shell && gtk_window_get_application (window))
     menu = gtk_application_get_app_menu (gtk_window_get_application (window));
@@ -585,7 +586,6 @@ construct_label_box (GtkHeaderBar *bar)
 static void
 gtk_header_bar_init (GtkHeaderBar *bar)
 {
-  GtkStyleContext *context;
   GtkHeaderBarPrivate *priv;
 
   priv = gtk_header_bar_get_instance_private (bar);
@@ -604,10 +604,6 @@ gtk_header_bar_init (GtkHeaderBar *bar)
 
   init_sizing_box (bar);
   construct_label_box (bar);
-
-  context = gtk_widget_get_style_context (GTK_WIDGET (bar));
-  gtk_style_context_add_class (context, "header-bar");
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_HORIZONTAL);
 }
 
 static gint
@@ -1779,7 +1775,6 @@ gtk_header_bar_realize (GtkWidget *widget)
                             G_CALLBACK (_gtk_header_bar_update_window_buttons), widget);
   g_signal_connect_swapped (settings, "notify::gtk-decoration-layout",
                             G_CALLBACK (_gtk_header_bar_update_window_buttons), widget);
-  _gtk_header_bar_update_window_buttons (GTK_HEADER_BAR (widget));
 }
 
 static void
@@ -1812,6 +1807,7 @@ gtk_header_bar_hierarchy_changed (GtkWidget *widget,
                                   GtkWidget *previous_toplevel)
 {
   GtkWidget *toplevel;
+  GtkHeaderBar *bar = GTK_HEADER_BAR (widget);
 
   toplevel = gtk_widget_get_toplevel (widget);
 
@@ -1822,6 +1818,8 @@ gtk_header_bar_hierarchy_changed (GtkWidget *widget,
   if (toplevel)
     g_signal_connect_after (toplevel, "window-state-event",
                             G_CALLBACK (window_state_changed), widget);
+
+  _gtk_header_bar_update_window_buttons (bar);
 }
 
 static void
@@ -1897,7 +1895,7 @@ gtk_header_bar_class_init (GtkHeaderBarClass *class)
                            P_("Custom Title"),
                            P_("Custom title widget to display"),
                            GTK_TYPE_WIDGET,
-                           G_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_STATIC_STRINGS);
+                           G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS);
 
   header_bar_props[PROP_SPACING] =
       g_param_spec_int ("spacing",
@@ -1975,6 +1973,7 @@ gtk_header_bar_class_init (GtkHeaderBarClass *class)
   g_object_class_install_properties (object_class, LAST_PROP, header_bar_props);
 
   gtk_widget_class_set_accessible_role (widget_class, ATK_ROLE_PANEL);
+  gtk_widget_class_set_css_name (widget_class, "headerbar");
 }
 
 static void

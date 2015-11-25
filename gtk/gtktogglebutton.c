@@ -59,6 +59,11 @@
  *
  * To simply switch the state of a toggle button, use gtk_toggle_button_toggled().
  *
+ * # CSS nodes
+ *
+ * GtkToggleButton has a single CSS node with name button. To differentiate
+ * it from a plain #GtkButton, it gets the .toggle style class.
+ *
  * ## Creating two #GtkToggleButton widgets.
  *
  * |[<!-- language="C" -->
@@ -215,14 +220,20 @@ gtk_toggle_button_class_init (GtkToggleButtonClass *class)
 		  G_TYPE_NONE, 0);
 
   gtk_widget_class_set_accessible_type (widget_class, GTK_TYPE_TOGGLE_BUTTON_ACCESSIBLE);
+  gtk_widget_class_set_css_name (widget_class, "button");
 }
 
 static void
 gtk_toggle_button_init (GtkToggleButton *toggle_button)
 {
+  GtkStyleContext *context;
+
   toggle_button->priv = gtk_toggle_button_get_instance_private (toggle_button);
   toggle_button->priv->active = FALSE;
   toggle_button->priv->draw_indicator = FALSE;
+
+  context = gtk_widget_get_style_context (GTK_WIDGET (toggle_button));
+  gtk_style_context_add_class (context, "toggle");
 }
 
 static void
@@ -408,24 +419,12 @@ gtk_toggle_button_set_mode (GtkToggleButton *toggle_button,
 
   if (priv->draw_indicator != draw_indicator)
     {
-      GtkStyleContext *context;
-
       priv->draw_indicator = draw_indicator;
 
       if (gtk_widget_get_visible (GTK_WIDGET (toggle_button)))
 	gtk_widget_queue_resize (GTK_WIDGET (toggle_button));
 
       g_object_notify_by_pspec (G_OBJECT (toggle_button), toggle_button_props[PROP_DRAW_INDICATOR]);
-
-      /* Make toggle buttons conditionally have the "button"
-       * class depending on draw_indicator.
-       */
-      context = gtk_widget_get_style_context (GTK_WIDGET (toggle_button));
-
-      if (draw_indicator)
-        gtk_style_context_remove_class (context, GTK_STYLE_CLASS_BUTTON);
-      else
-        gtk_style_context_add_class (context, GTK_STYLE_CLASS_BUTTON);
     }
 }
 

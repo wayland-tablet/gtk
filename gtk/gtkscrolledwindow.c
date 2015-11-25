@@ -43,6 +43,7 @@
 #include "gtkwindow.h"
 #include "gtkkineticscrolling.h"
 #include "a11y/gtkscrolledwindowaccessible.h"
+#include "gtkstylecontextprivate.h"
 
 #include <math.h>
 
@@ -104,6 +105,22 @@
  * scrollbars are desired although no mouse is present, this behaviour
  * can be turned off with the #GtkScrolledWindow:overlay-scrolling
  * property.
+ *
+ * # CSS nodes
+ *
+ * GtkScrolledWindow has a main CSS node with name scrolledwindow.
+ *
+ * It uses subnodes with names overshoot and undershoot to
+ * draw the overflow and underflow indications. These nodes get
+ * the .left, .right, .top or .bottom style class added depending
+ * on where the indication is drawn.
+ *
+ * GtkScrolledWindow also sets the positional style classes (.left,
+ * .right, .top, .bottom) and style classes related to overlay
+ * scrolling (.overlay-indicator, .dragging, .hovering) on its scrollbars.
+ *
+ * If both scrollbars are visible, the area where they meet is drawn
+ * with a subnode named junction.
  */
 
 
@@ -192,6 +209,9 @@ struct _GtkScrolledWindowPrivate
 {
   GtkWidget     *hscrollbar;
   GtkWidget     *vscrollbar;
+
+  GtkCssNode    *overshoot_node[4];
+  GtkCssNode    *undershoot_node[4];
 
   Indicator hindicator;
   Indicator vindicator;
@@ -415,6 +435,62 @@ gtk_scrolled_window_leave_notify (GtkWidget        *widget,
 }
 
 static void
+update_scrollbar_positions (GtkScrolledWindow *scrolled_window)
+{
+  GtkScrolledWindowPrivate *priv = scrolled_window->priv;
+  GtkStyleContext *context;
+  gboolean is_rtl;
+
+  if (priv->hscrollbar != NULL)
+    {
+      context = gtk_widget_get_style_context (priv->hscrollbar);
+      if (priv->window_placement == GTK_CORNER_TOP_LEFT ||
+          priv->window_placement == GTK_CORNER_TOP_RIGHT)
+        {
+          gtk_style_context_add_class (context, GTK_STYLE_CLASS_BOTTOM);
+          gtk_style_context_remove_class (context, GTK_STYLE_CLASS_TOP);
+        }
+      else
+        {
+          gtk_style_context_remove_class (context, GTK_STYLE_CLASS_BOTTOM);
+          gtk_style_context_add_class (context, GTK_STYLE_CLASS_TOP);
+        }
+    }
+
+  if (priv->vscrollbar != NULL)
+    {
+      context = gtk_widget_get_style_context (priv->vscrollbar);
+      is_rtl = gtk_widget_get_direction (GTK_WIDGET (scrolled_window)) == GTK_TEXT_DIR_RTL;
+      if ((is_rtl &&
+          (priv->window_placement == GTK_CORNER_TOP_RIGHT ||
+           priv->window_placement == GTK_CORNER_BOTTOM_RIGHT)) ||
+         (!is_rtl &&
+          (priv->window_placement == GTK_CORNER_TOP_LEFT ||
+           priv->window_placement == GTK_CORNER_BOTTOM_LEFT)))
+        {
+          gtk_style_context_add_class (context, GTK_STYLE_CLASS_LEFT);
+          gtk_style_context_remove_class (context, GTK_STYLE_CLASS_RIGHT);
+        }
+      else
+        {
+          gtk_style_context_remove_class (context, GTK_STYLE_CLASS_LEFT);
+          gtk_style_context_add_class (context, GTK_STYLE_CLASS_RIGHT);
+        }
+    }
+}
+
+static void
+gtk_scrolled_window_direction_changed (GtkWidget        *widget,
+                                       GtkTextDirection  previous_dir)
+{
+  GtkScrolledWindow *scrolled_window = GTK_SCROLLED_WINDOW (widget);
+
+  update_scrollbar_positions (scrolled_window);
+
+  GTK_WIDGET_CLASS (gtk_scrolled_window_parent_class)->direction_changed (widget, previous_dir);
+}
+
+static void
 gtk_scrolled_window_class_init (GtkScrolledWindowClass *class)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (class);
@@ -443,6 +519,7 @@ gtk_scrolled_window_class_init (GtkScrolledWindowClass *class)
   widget_class->realize = gtk_scrolled_window_realize;
   widget_class->unrealize = gtk_scrolled_window_unrealize;
   widget_class->leave_notify_event = gtk_scrolled_window_leave_notify;
+  widget_class->direction_changed = gtk_scrolled_window_direction_changed;
 
   container_class->add = gtk_scrolled_window_add;
   container_class->remove = gtk_scrolled_window_remove;
@@ -722,6 +799,7 @@ gtk_scrolled_window_class_init (GtkScrolledWindowClass *class)
   add_tab_bindings (binding_set, GDK_CONTROL_MASK | GDK_SHIFT_MASK, GTK_DIR_TAB_BACKWARD);
 
   gtk_widget_class_set_accessible_type (widget_class, GTK_TYPE_SCROLLED_WINDOW_ACCESSIBLE);
+  gtk_widget_class_set_css_name (widget_class, "scrolledwindow");
 }
 
 static gboolean
@@ -1301,6 +1379,14 @@ gtk_scrolled_window_init (GtkScrolledWindow *scrolled_window)
 {
   GtkWidget *widget = GTK_WIDGET (scrolled_window);
   GtkScrolledWindowPrivate *priv;
+  GtkCssNode *widget_node;
+  GQuark classes[4] = {
+    g_quark_from_static_string (GTK_STYLE_CLASS_LEFT),
+    g_quark_from_static_string (GTK_STYLE_CLASS_RIGHT),
+    g_quark_from_static_string (GTK_STYLE_CLASS_TOP),
+    g_quark_from_static_string (GTK_STYLE_CLASS_BOTTOM),
+  };
+  gint i;
 
   scrolled_window->priv = priv =
     gtk_scrolled_window_get_instance_private (scrolled_window);
@@ -1362,6 +1448,24 @@ gtk_scrolled_window_init (GtkScrolledWindow *scrolled_window)
   gtk_scrolled_window_set_capture_button_press (scrolled_window, TRUE);
 
   _gtk_widget_set_captured_event_handler (widget, captured_event_cb);
+
+  widget_node = gtk_widget_get_css_node (widget);
+  for (i = 0; i < 4; i++)
+    {
+      priv->overshoot_node[i] = gtk_css_node_new ();
+      gtk_css_node_set_name (priv->overshoot_node[i], I_("overshoot"));
+      gtk_css_node_add_class (priv->overshoot_node[i], classes[i]);
+      gtk_css_node_set_parent (priv->overshoot_node[i], widget_node);
+      gtk_css_node_set_state (priv->overshoot_node[i], gtk_css_node_get_state (widget_node));
+      g_object_unref (priv->overshoot_node[i]);
+
+      priv->undershoot_node[i] = gtk_css_node_new ();
+      gtk_css_node_set_name (priv->undershoot_node[i], I_("undershoot"));
+      gtk_css_node_add_class (priv->undershoot_node[i], classes[i]);
+      gtk_css_node_set_parent (priv->undershoot_node[i], widget_node);
+      gtk_css_node_set_state (priv->undershoot_node[i], gtk_css_node_get_state (widget_node));
+      g_object_unref (priv->undershoot_node[i]);
+    }
 }
 
 /**
@@ -1429,6 +1533,7 @@ gtk_scrolled_window_set_hadjustment (GtkScrolledWindow *scrolled_window,
       gtk_widget_set_parent (priv->hscrollbar, GTK_WIDGET (scrolled_window));
       g_object_ref (priv->hscrollbar);
       gtk_widget_show (priv->hscrollbar);
+      update_scrollbar_positions (scrolled_window);
     }
   else
     {
@@ -1496,6 +1601,7 @@ gtk_scrolled_window_set_vadjustment (GtkScrolledWindow *scrolled_window,
       gtk_widget_set_parent (priv->vscrollbar, GTK_WIDGET (scrolled_window));
       g_object_ref (priv->vscrollbar);
       gtk_widget_show (priv->vscrollbar);
+      update_scrollbar_positions (scrolled_window);
     }
   else
     {
@@ -1689,6 +1795,7 @@ gtk_scrolled_window_set_placement_internal (GtkScrolledWindow *scrolled_window,
   if (priv->window_placement != window_placement)
     {
       priv->window_placement = window_placement;
+      update_scrollbar_positions (scrolled_window);
 
       gtk_widget_queue_resize (GTK_WIDGET (scrolled_window));
 
@@ -2113,7 +2220,7 @@ gtk_scrolled_window_draw_scrollbars_junction (GtkScrolledWindow *scrolled_window
       GtkStateFlags state;
       GtkBorder padding, border;
 
-      state = gtk_widget_get_state_flags (widget);
+      state = gtk_style_context_get_state (context);
 
       gtk_style_context_get_padding (context, state, &padding);
       gtk_style_context_get_border (context, state, &border);
@@ -2142,8 +2249,7 @@ gtk_scrolled_window_draw_scrollbars_junction (GtkScrolledWindow *scrolled_window
       priv->window_placement == GTK_CORNER_TOP_RIGHT)
     junction_rect.y += vscr_allocation.height;
 
-  gtk_style_context_save (context);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_SCROLLBARS_JUNCTION);
+  gtk_style_context_save_named (context, "junction");
 
   gtk_render_background (context, cr,
                          junction_rect.x, junction_rect.y,
@@ -2179,6 +2285,7 @@ static void
 gtk_scrolled_window_draw_overshoot (GtkScrolledWindow *scrolled_window,
 				    cairo_t           *cr)
 {
+  GtkScrolledWindowPrivate *priv = scrolled_window->priv;
   GtkWidget *widget = GTK_WIDGET (scrolled_window);
   gint overshoot_x, overshoot_y;
   GtkStyleContext *context;
@@ -2193,47 +2300,35 @@ gtk_scrolled_window_draw_overshoot (GtkScrolledWindow *scrolled_window,
   overshoot_x = CLAMP (overshoot_x, - MAX_OVERSHOOT_DISTANCE, MAX_OVERSHOOT_DISTANCE);
   overshoot_y = CLAMP (overshoot_y, - MAX_OVERSHOOT_DISTANCE, MAX_OVERSHOOT_DISTANCE);
 
-  gtk_style_context_save (context);
-  gtk_style_context_remove_class (context, GTK_STYLE_CLASS_FRAME);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_OVERSHOOT);
-
   if (overshoot_x > 0)
     {
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_RIGHT);
-
+      gtk_style_context_save_to_node (context, priv->overshoot_node[GTK_POS_RIGHT]);
       gtk_render_background (context, cr, rect.x + rect.width - overshoot_x, rect.y, overshoot_x, rect.height);
       gtk_render_frame (context, cr, rect.x + rect.width - overshoot_x, rect.y, overshoot_x, rect.height);
+      gtk_style_context_restore (context);
     }
   else if (overshoot_x < 0)
     {
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_LEFT);
-
+      gtk_style_context_save_to_node (context, priv->overshoot_node[GTK_POS_LEFT]);
       gtk_render_background (context, cr, rect.x, rect.y, -overshoot_x, rect.height);
       gtk_render_frame (context, cr, rect.x, rect.y, -overshoot_x, rect.height);
+      gtk_style_context_restore (context);
     }
-
-  gtk_style_context_restore (context);
-
-  gtk_style_context_save (context);
-  gtk_style_context_remove_class (context, GTK_STYLE_CLASS_FRAME);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_OVERSHOOT);
 
   if (overshoot_y > 0)
     {
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_BOTTOM);
-
+      gtk_style_context_save_to_node (context, priv->overshoot_node[GTK_POS_BOTTOM]);
       gtk_render_background (context, cr, rect.x, rect.y + rect.height - overshoot_y, rect.width, overshoot_y);
       gtk_render_frame (context, cr, rect.x, rect.y + rect.height - overshoot_y, rect.width, overshoot_y);
+      gtk_style_context_restore (context);
     }
   else if (overshoot_y < 0)
     {
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_TOP);
-
+      gtk_style_context_save_to_node (context, priv->overshoot_node[GTK_POS_TOP]);
       gtk_render_background (context, cr, rect.x, rect.y, rect.width, -overshoot_y);
       gtk_render_frame (context, cr, rect.x, rect.y, rect.width, -overshoot_y);
+      gtk_style_context_restore (context);
     }
-
-  gtk_style_context_restore (context);
 }
 
 static void
@@ -2249,51 +2344,38 @@ gtk_scrolled_window_draw_undershoot (GtkScrolledWindow *scrolled_window,
   context = gtk_widget_get_style_context (widget);
   gtk_scrolled_window_inner_allocation (widget, &rect);
 
-  gtk_style_context_save (context);
-  gtk_style_context_remove_class (context, GTK_STYLE_CLASS_FRAME);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_UNDERSHOOT);
-
   adj = gtk_range_get_adjustment (GTK_RANGE (priv->hscrollbar));
   if (gtk_adjustment_get_value (adj) < gtk_adjustment_get_upper (adj) - gtk_adjustment_get_page_size (adj))
     {
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_RIGHT);
-
+      gtk_style_context_save_to_node (context, priv->undershoot_node[GTK_POS_RIGHT]);
       gtk_render_background (context, cr, rect.x + rect.width - UNDERSHOOT_SIZE, rect.y, UNDERSHOOT_SIZE, rect.height);
       gtk_render_frame (context, cr, rect.x + rect.width - UNDERSHOOT_SIZE, rect.y, UNDERSHOOT_SIZE, rect.height);
 
-      gtk_style_context_remove_class (context, GTK_STYLE_CLASS_RIGHT);
+      gtk_style_context_restore (context);
     }
   if (gtk_adjustment_get_value (adj) > gtk_adjustment_get_lower (adj))
     {
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_LEFT);
-
+      gtk_style_context_save_to_node (context, priv->undershoot_node[GTK_POS_LEFT]);
       gtk_render_background (context, cr, rect.x, rect.y, UNDERSHOOT_SIZE, rect.height);
       gtk_render_frame (context, cr, rect.x, rect.y, UNDERSHOOT_SIZE, rect.height);
-
-      gtk_style_context_remove_class (context, GTK_STYLE_CLASS_LEFT);
+      gtk_style_context_restore (context);
     }
 
   adj = gtk_range_get_adjustment (GTK_RANGE (priv->vscrollbar));
   if (gtk_adjustment_get_value (adj) < gtk_adjustment_get_upper (adj) - gtk_adjustment_get_page_size (adj))
     {
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_BOTTOM);
-
+      gtk_style_context_save_to_node (context, priv->undershoot_node[GTK_POS_BOTTOM]);
       gtk_render_background (context, cr, rect.x, rect.y + rect.height - UNDERSHOOT_SIZE, rect.width, UNDERSHOOT_SIZE);
       gtk_render_frame (context, cr, rect.x, rect.y + rect.height - UNDERSHOOT_SIZE, rect.width, UNDERSHOOT_SIZE);
-
-      gtk_style_context_remove_class (context, GTK_STYLE_CLASS_BOTTOM);
+      gtk_style_context_restore (context);
     }
   if (gtk_adjustment_get_value (adj) > gtk_adjustment_get_lower (adj))
     {
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_TOP);
-
+      gtk_style_context_save_to_node (context, priv->undershoot_node[GTK_POS_TOP]);
       gtk_render_background (context, cr, rect.x, rect.y, rect.width, UNDERSHOOT_SIZE);
       gtk_render_frame (context, cr, rect.x, rect.y, rect.width, UNDERSHOOT_SIZE);
-
-      gtk_style_context_remove_class (context, GTK_STYLE_CLASS_TOP);
+      gtk_style_context_restore (context);
     }
-
-  gtk_style_context_restore (context);
 }
 
 static gboolean
@@ -2327,7 +2409,7 @@ gtk_scrolled_window_draw (GtkWidget *widget,
           GtkStateFlags state;
           GtkBorder padding, border;
 
-          state = gtk_widget_get_state_flags (widget);
+          state = gtk_style_context_get_state (context);
           gtk_style_context_get_padding (context, state, &padding);
           gtk_style_context_get_border (context, state, &border);
 
@@ -2553,10 +2635,7 @@ gtk_scrolled_window_relative_allocation (GtkWidget     *widget,
       GtkBorder padding, border;
 
       context = gtk_widget_get_style_context (widget);
-      state = gtk_widget_get_state_flags (widget);
-
-      gtk_style_context_save (context);
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_FRAME);
+      state = gtk_style_context_get_state (context);
 
       gtk_style_context_get_border (context, state, &border);
       gtk_style_context_get_padding (context, state, &padding);
@@ -2565,8 +2644,6 @@ gtk_scrolled_window_relative_allocation (GtkWidget     *widget,
       allocation->y += padding.top + border.top;
       allocation->width = MAX (1, allocation->width - (padding.left + border.left + padding.right + border.right));
       allocation->height = MAX (1, allocation->height - (padding.top + border.top + padding.bottom + border.bottom));
-
-      gtk_style_context_restore (context);
     }
 
   if (priv->vscrollbar_visible && !priv->use_indicators)
@@ -2682,14 +2759,11 @@ gtk_scrolled_window_allocate_scrollbar (GtkScrolledWindow *scrolled_window,
   gtk_widget_get_preferred_width (priv->vscrollbar, &sb_width, NULL);
 
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
 
-  gtk_style_context_save (context);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_FRAME);
   gtk_widget_style_get (widget, "scrollbars-within-bevel", &scrollbars_within_bevel, NULL);
   gtk_style_context_get_padding (context, state, &padding);
   gtk_style_context_get_border (context, state, &border);
-  gtk_style_context_restore (context);
 
   if (scrollbar == priv->hscrollbar)
     {
@@ -3808,10 +3882,7 @@ gtk_scrolled_window_get_preferred_size (GtkWidget      *widget,
       GtkBorder padding, border;
 
       context = gtk_widget_get_style_context (GTK_WIDGET (widget));
-      state = gtk_widget_get_state_flags (GTK_WIDGET (widget));
-
-      gtk_style_context_save (context);
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_FRAME);
+      state = gtk_style_context_get_state (context);
 
       gtk_style_context_get_padding (context, state, &padding);
       gtk_style_context_get_border (context, state, &border);
@@ -3820,8 +3891,6 @@ gtk_scrolled_window_get_preferred_size (GtkWidget      *widget,
       minimum_req.height += padding.top + padding.bottom + border.top + border.bottom;
       natural_req.width += padding.left + padding.right + border.left + border.right;
       natural_req.height += padding.top + padding.bottom + border.top + border.bottom;
-
-      gtk_style_context_restore (context);
     }
 
   if (orientation == GTK_ORIENTATION_HORIZONTAL)

@@ -290,7 +290,6 @@ gtk_settings_init (GtkSettings *settings)
   guint i = 0;
   gchar *path;
   const gchar * const *config_dirs;
-  const gchar *config_dir;
 
   priv = gtk_settings_get_instance_private (settings);
   settings->priv = priv;
@@ -340,9 +339,9 @@ gtk_settings_init (GtkSettings *settings)
   g_free (path);
 
   config_dirs = g_get_system_config_dirs ();
-  for (config_dir = *config_dirs; *config_dirs != NULL; config_dirs++)
+  for (i = 0; config_dirs[i] != NULL; i++)
     {
-      path = g_build_filename (config_dir, "gtk-3.0", "settings.ini", NULL);
+      path = g_build_filename (config_dirs[i], "gtk-3.0", "settings.ini", NULL);
       if (g_file_test (path, G_FILE_TEST_EXISTS))
         gtk_settings_load_from_key_file (settings, path, GTK_SETTINGS_SOURCE_DEFAULT);
       g_free (path);
@@ -508,10 +507,15 @@ gtk_settings_class_init (GtkSettingsClass *class)
                                              NULL);
   g_assert (result == PROP_DND_DRAG_THRESHOLD);
 
+  /**
+   * GtkSettings:gtk-font-name:
+   *
+   * The default font to use. GTK+ uses the family name and size from this string.
+   */
   result = settings_install_property_parser (class,
                                              g_param_spec_string ("gtk-font-name",
                                                                    P_("Font Name"),
-                                                                   P_("Name of default font to use"),
+                                                                   P_("The default font family and size to use"),
                                                                   "Sans 10",
                                                                   GTK_PARAM_READWRITE),
                                              NULL);

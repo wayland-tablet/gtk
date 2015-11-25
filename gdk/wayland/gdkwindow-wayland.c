@@ -1226,8 +1226,19 @@ should_map_as_subsurface (GdkWindow *window)
   if (GDK_WINDOW_TYPE (window) == GDK_WINDOW_SUBSURFACE)
     return TRUE;
 
-  if (impl->hint == GDK_WINDOW_TYPE_HINT_TOOLTIP)
-    return TRUE;
+  switch (impl->hint)
+    {
+    case GDK_WINDOW_TYPE_HINT_TOOLTIP:
+      return TRUE;
+
+    case GDK_WINDOW_TYPE_HINT_UTILITY:
+      if (GDK_WINDOW_TYPE (window) == GDK_WINDOW_TEMP)
+        return TRUE;
+      break;
+
+    default:
+      break;
+    }
 
   return FALSE;
 }
@@ -1237,13 +1248,43 @@ should_map_as_popup (GdkWindow *window)
 {
   GdkWindowImplWayland *impl = GDK_WINDOW_IMPL_WAYLAND (window->impl);
 
-  if (impl->hint == GDK_WINDOW_TYPE_HINT_POPUP_MENU ||
-      impl->hint == GDK_WINDOW_TYPE_HINT_DROPDOWN_MENU ||
-      impl->hint == GDK_WINDOW_TYPE_HINT_UTILITY ||
-      impl->hint == GDK_WINDOW_TYPE_HINT_COMBO)
-    return TRUE;
+  switch (impl->hint)
+    {
+    case GDK_WINDOW_TYPE_HINT_POPUP_MENU:
+    case GDK_WINDOW_TYPE_HINT_DROPDOWN_MENU:
+    case GDK_WINDOW_TYPE_HINT_COMBO:
+      return TRUE;
+
+    case GDK_WINDOW_TYPE_HINT_UTILITY:
+      if (GDK_WINDOW_TYPE (window) != GDK_WINDOW_TEMP)
+        return TRUE;
+      break;
+
+    default:
+      break;
+    }
 
   return FALSE;
+}
+
+/* Get the window that can be used as a parent for a popup, i.e. a xdg_surface
+ * or xdg_popup. If the window is not, traverse up the transiency parents until
+ * we find one.
+ */
+static GdkWindow *
+get_popup_parent (GdkWindow *window)
+{
+  while (window)
+    {
+      GdkWindowImplWayland *impl = GDK_WINDOW_IMPL_WAYLAND (window->impl);
+
+      if (impl->xdg_popup || impl->xdg_surface)
+        return window;
+
+      window = impl->transient_for;
+    }
+
+  return NULL;
 }
 
 static void
@@ -1309,7 +1350,7 @@ gdk_wayland_window_map (GdkWindow *window)
             }
 
           if (transient_for)
-            transient_for = gdk_window_get_toplevel (transient_for);
+            transient_for = get_popup_parent (gdk_window_get_toplevel (transient_for));
 
           /* If the position was not explicitly set, start the popup at the
            * position of the device that holds the grab.
@@ -1320,7 +1361,7 @@ gdk_wayland_window_map (GdkWindow *window)
                                             &window->x, &window->y, NULL);
         }
       else
-        transient_for = impl->transient_for;
+        transient_for = get_popup_parent (impl->transient_for);
 
       if (!transient_for)
         {
@@ -1728,7 +1769,11 @@ gdk_wayland_window_destroy (GdkWindow *window,
   gdk_wayland_window_hide_surface (window);
 
   if (impl->cairo_surface)
-    cairo_surface_finish (impl->cairo_surface);
+    {
+      cairo_surface_finish (impl->cairo_surface);
+      cairo_surface_destroy (impl->cairo_surface);
+      impl->cairo_surface = NULL;
+    }
 }
 
 static void
@@ -2341,10 +2386,6 @@ gdk_wayland_window_set_shadow_width (GdkWindow *window,
   gint new_width, new_height;
 
   if (GDK_WINDOW_DESTROYED (window))
-    return;
-
-  if (left == impl->margin_left && right == impl->margin_right &&
-      top == impl->margin_top && bottom == impl->margin_bottom)
     return;
 
   /* Reconfigure window to keep the same window geometry */

@@ -97,7 +97,7 @@ gtk_css_style_property_register (const char *                   name,
                        "initial-value", initial_value,
                        "name", name,
                        NULL);
-  
+
   node->parse_value = parse_value;
   node->query_value = query_value;
   node->assign_value = assign_value;
@@ -1570,7 +1570,7 @@ _gtk_css_style_property_init_properties (void)
                                           NULL,
                                           NULL,
                                           _gtk_css_image_value_new (gtk_css_image_builtin_new ()));
-  gtk_css_style_property_register        ("icon-shadow",
+  gtk_css_style_property_register        ("-gtk-icon-shadow",
                                           GTK_CSS_PROPERTY_ICON_SHADOW,
                                           G_TYPE_NONE,
                                           GTK_STYLE_PROPERTY_INHERIT | GTK_STYLE_PROPERTY_ANIMATED,
@@ -1579,6 +1579,7 @@ _gtk_css_style_property_init_properties (void)
                                           NULL,
                                           NULL,
                                           _gtk_css_shadows_value_new_none ());
+  _gtk_style_property_add_alias ("-gtk-icon-shadow", "icon-shadow");
   gtk_css_style_property_register        ("-gtk-icon-style",
                                           GTK_CSS_PROPERTY_ICON_STYLE,
                                           G_TYPE_NONE,
@@ -1742,7 +1743,7 @@ G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 G_GNUC_END_IGNORE_DEPRECATIONS
 
   /* Private property holding the binding sets */
-  gtk_css_style_property_register        ("gtk-key-bindings",
+  gtk_css_style_property_register        ("-gtk-key-bindings",
                                           GTK_CSS_PROPERTY_GTK_KEY_BINDINGS,
                                           G_TYPE_PTR_ARRAY,
                                           0,
@@ -1751,5 +1752,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
                                           bindings_value_query,
                                           bindings_value_assign,
                                           _gtk_css_array_value_new (_gtk_css_string_value_new (NULL)));
+  _gtk_style_property_add_alias ("-gtk-key-bindings", "gtk-key-bindings");
 }
 

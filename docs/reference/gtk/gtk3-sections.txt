@@ -628,6 +628,7 @@ gtk_builder_add_from_string
 gtk_builder_add_objects_from_file
 gtk_builder_add_objects_from_string
 gtk_builder_add_objects_from_resource
+gtk_builder_extend_with_template
 gtk_builder_get_object
 gtk_builder_get_objects
 gtk_builder_expose_object
@@ -1430,6 +1431,25 @@ GTK_TYPE_FILE_CHOOSER
 <SUBSECTION Private>
 gtk_file_chooser_error_quark
 gtk_file_chooser_get_type
+</SECTION>
+
+<SECTION>
+<FILE>gtkfilechoosernative</FILE>
+<TITLE>GtkFileChooserNative</TITLE>
+gtk_file_chooser_native_new
+gtk_file_chooser_native_get_accept_label
+gtk_file_chooser_native_set_accept_label
+gtk_file_chooser_native_get_cancel_label
+gtk_file_chooser_native_set_cancel_label
+<SUBSECTION Standard>
+GTK_FILE_CHOOSER_NATIVE
+GTK_IS_FILE_CHOOSER_NATIVE
+GTK_TYPE_FILE_CHOOSER_NATIVE
+GTK_FILE_CHOOSER_NATIVE_CLASS
+GTK_IS_FILE_CHOOSER_NATIVE_CLASS
+GTK_FILE_CHOOSER_NATIVE_GET_CLASS
+<SUBSECTION Private>
+gtk_file_chooser_native_get_type
 </SECTION>
 
 <SECTION>
@@ -2491,6 +2511,28 @@ GTK_MISC_GET_CLASS
 <SUBSECTION Private>
 GtkMiscPrivate
 gtk_misc_get_type
+</SECTION>
+
+<SECTION>
+<FILE>gtknativedialog</FILE>
+<TITLE>GtkNativeDialog</TITLE>
+GTK_TYPE_NATIVE_DIALOG
+GtkNativeDialogClass
+gtk_native_dialog_show
+gtk_native_dialog_hide
+gtk_native_dialog_destroy
+gtk_native_dialog_get_visible
+gtk_native_dialog_set_modal
+gtk_native_dialog_get_modal
+gtk_native_dialog_set_title
+gtk_native_dialog_get_title
+gtk_native_dialog_set_transient_for
+gtk_native_dialog_get_transient_for
+gtk_native_dialog_run
+<SUBSECTION Standard>
+GtkNativeDialog
+<SUBSECTION Private>
+gtk_native_dialog_get_type
 </SECTION>
 
 <SECTION>
@@ -5407,6 +5449,7 @@ gtk_widget_draw
 gtk_widget_queue_draw
 gtk_widget_queue_resize
 gtk_widget_queue_resize_no_redraw
+gtk_widget_queue_allocate
 gtk_widget_get_frame_clock
 gtk_widget_get_scale_factor
 GtkTickCallback
@@ -5553,6 +5596,7 @@ gtk_widget_get_allocated_height
 gtk_widget_get_allocation
 gtk_widget_set_allocation
 gtk_widget_get_allocated_baseline
+gtk_widget_get_allocated_size
 gtk_widget_get_clip
 gtk_widget_set_clip
 gtk_widget_get_app_paintable
@@ -5560,6 +5604,8 @@ gtk_widget_get_can_default
 gtk_widget_set_can_default
 gtk_widget_get_can_focus
 gtk_widget_set_can_focus
+gtk_widget_get_focus_on_click
+gtk_widget_set_focus_on_click
 gtk_widget_get_double_buffered
 gtk_widget_get_has_window
 gtk_widget_set_has_window
@@ -5602,6 +5648,8 @@ gtk_widget_get_action_group
 gtk_widget_get_path
 gtk_widget_get_style_context
 gtk_widget_reset_style
+gtk_widget_class_get_css_name
+gtk_widget_class_set_css_name
 
 <SUBSECTION>
 gtk_requisition_new
@@ -5947,6 +5995,7 @@ gtk_widget_path_iter_add_region
 gtk_widget_path_iter_clear_classes
 gtk_widget_path_iter_clear_regions
 gtk_widget_path_iter_get_name
+gtk_widget_path_iter_get_object_name
 gtk_widget_path_iter_get_object_type
 gtk_widget_path_iter_get_siblings
 gtk_widget_path_iter_get_sibling_index
@@ -5962,6 +6011,7 @@ gtk_widget_path_iter_list_regions
 gtk_widget_path_iter_remove_class
 gtk_widget_path_iter_remove_region
 gtk_widget_path_iter_set_name
+gtk_widget_path_iter_set_object_name
 gtk_widget_path_iter_set_object_type
 gtk_widget_path_iter_set_state
 gtk_widget_path_length
@@ -7545,6 +7595,8 @@ gtk_application_window_new
 gtk_application_window_set_show_menubar
 gtk_application_window_get_show_menubar
 gtk_application_window_get_id
+gtk_application_window_set_help_overlay
+gtk_application_window_get_help_overlay
 
 <SUBSECTION Standard>
 GTK_TYPE_APPLICATION_WINDOW
@@ -8421,4 +8473,79 @@ GTK_IS_GL_AREA
 GTK_IS_GL_AREA_CLASS
 <SUBSECTION Private>
 gtk_gl_area_get_type
+</SECTION>
+
+<SECTION>
+<FILE>gtkshortcutswindow</FILE>
+GtkShortcutsWindow
+<SUBSECTION Standard>
+GTK_TYPE_SHORTCUTS_WINDOW
+GTK_SHORTCUTS_WINDOW
+GTK_IS_SHORTCUTS_WINDOW
+GTK_SHORTCUTS_WINDOW_CLASS
+GTK_IS_SHORTCUTS_WINDOW_CLASS
+GTK_GET_SHORTCUTS_WINDOW_CLASS
+<SUBSECTION Private>
+GtkShortcutsWindowClass
+gtk_shortcuts_window_get_type
+</SECTION>
+
+<SECTION>
+<FILE>gtkshortcutssection</FILE>
+GtkShortcutsSection
+<SUBSECTION Standard>
+GTK_TYPE_SHORTCUTS_SECTION
+GTK_SHORTCUTS_SECTION
+GTK_IS_SHORTCUTS_SECTION
+GTK_SHORTCUTS_SECTION_CLASS
+GTK_IS_SHORTCUTS_SECTION_CLASS
+GTK_GET_SHORTCUTS_SECTION_CLASS
+<SUBSECTION Private>
+GtkShortcutsSectionClass
+gtk_shortcuts_section_get_type
+</SECTION>
+
+<SECTION>
+<FILE>gtkshortcutsgroup</FILE>
+GtkShortcutsGroup
+<SUBSECTION Standard>
+GTK_TYPE_SHORTCUTS_GROUP
+GTK_SHORTCUTS_GROUP
+GTK_IS_SHORTCUTS_GROUP
+GTK_SHORTCUTS_GROUP_CLASS
+GTK_IS_SHORTCUTS_GROUP_CLASS
+GTK_GET_SHORTCUTS_GROUP_CLASS
+<SUBSECTION Private>
+GtkShortcutsGroupClass
+gtk_shortcuts_group_get_type
+</SECTION>
+
+<SECTION>
+<FILE>gtkshortcutsshortcut</FILE>
+GtkShortcutsShortcut
+GtkShortcutType
+<SUBSECTION Standard>
+GTK_TYPE_SHORTCUTS_SHORTCUT
+GTK_SHORTCUTS_SHORTCUT
+GTK_IS_SHORTCUTS_SHORTCUT
+GTK_SHORTCUTS_SHORTCUT_CLASS
+GTK_IS_SHORTCUTS_SHORTCUT_CLASS
+GTK_GET_SHORTCUTS_SHORTCUT_CLASS
+<SUBSECTION Private>
+GtkShortcutsShortcutClass
+gtk_shortcuts_shortcut_get_type
+</SECTION>
+
+<SECTION>
+<FILE>gtkshortcutsgesture</FILE>
+GtkShortcutsGesture
+<SUBSECTION Standard>
+GTK_TYPE_SHORTCUTS_GESTURE
+GTK_SHORTCUTS_GESTURE
+GTK_IS_SHORTCUTS_GESTURE
+GTK_SHORTCUTS_GESTURE_CLASS
+GTK_IS_SHORTCUTS_GESTURE_CLASS
+GTK_GET_SHORTCUTS_GESTURE_CLASS
+<SUBSECTION Private>
+gtk_shortcuts_gesture_get_type
 </SECTION>

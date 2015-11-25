@@ -49,6 +49,8 @@
 #include "gtktypebuiltins.h"
 #include "gtkwidgetpath.h"
 #include "gtkwidgetprivate.h"
+#include "gtkstylecontextprivate.h"
+#include "gtkcssstylepropertyprivate.h"
 
 #include "a11y/gtkspinbuttonaccessible.h"
 
@@ -77,6 +79,30 @@
  * The main properties of a GtkSpinButton are through an adjustment.
  * See the #GtkAdjustment section for more details about an adjustment's
  * properties.
+ *
+ * # CSS nodes
+ *
+ * |[<!-- language="plain" -->
+ * spinbutton.horizontal
+ * ├── entry
+ * │   ╰── ...
+ * ├── button.down
+ * ╰── button.up
+ * ]|
+ *
+ * |[<!-- language="plain" -->
+ * spinbutton.vertical
+ * ├── button.up
+ * ├── entry
+ * │   ╰── ...
+ * ╰── button.down
+ * ]|
+ *
+ * GtkSpinButtons main CSS node has the name spinbutton. It creates subnodes
+ * for the entry and the two buttons, with these names. The button nodes have
+ * the style classes .up and .down. The GtkEntry subnodes (if present) are put
+ * below the entry node. The orientation of the spin button is reflected in
+ * the .vertical or .horizontal style class on the main node.
  *
  * ## Using a GtkSpinButton to get an integer
  *
@@ -144,6 +170,11 @@
  * ]|
  */
 
+enum {
+  UP_PANEL,
+  DOWN_PANEL
+};
+
 struct _GtkSpinButtonPrivate
 {
   GtkAdjustment *adjustment;
@@ -151,8 +182,9 @@ struct _GtkSpinButtonPrivate
   GdkWindow     *down_panel;
   GdkWindow     *up_panel;
 
-  GtkStyleContext *down_panel_context;
-  GtkStyleContext *up_panel_context;
+  GtkCssNode *entry_node;
+  GtkCssNode *down_node;
+  GtkCssNode *up_node;
 
   GdkWindow     *click_child;
   GdkWindow     *in_child;
@@ -248,7 +280,6 @@ static void gtk_spin_button_grab_notify    (GtkWidget          *widget,
                                             gboolean            was_grabbed);
 static void gtk_spin_button_state_flags_changed  (GtkWidget     *widget,
                                                   GtkStateFlags  previous_state);
-static void gtk_spin_button_style_updated   (GtkWidget         *widget);
 static gboolean gtk_spin_button_timer          (GtkSpinButton      *spin_button);
 static gboolean gtk_spin_button_stop_spinning  (GtkSpinButton      *spin);
 static void gtk_spin_button_value_changed  (GtkAdjustment      *adjustment,
@@ -257,6 +288,8 @@ static gint gtk_spin_button_key_release    (GtkWidget          *widget,
                                             GdkEventKey        *event);
 static gint gtk_spin_button_scroll         (GtkWidget          *widget,
                                             GdkEventScroll     *event);
+static void gtk_spin_button_direction_changed (GtkWidget        *widget,
+                                               GtkTextDirection  previous_dir);
 static void gtk_spin_button_activate       (GtkEntry           *entry);
 static void gtk_spin_button_get_text_area_size (GtkEntry *entry,
                                                 gint     *x,
@@ -280,6 +313,7 @@ static void gtk_spin_button_real_change_value (GtkSpinButton   *spin,
 static gint gtk_spin_button_default_input  (GtkSpinButton      *spin_button,
                                             gdouble            *new_val);
 static void gtk_spin_button_default_output (GtkSpinButton      *spin_button);
+static void update_node_state              (GtkSpinButton *spin_button);
 
 static guint spinbutton_signals[LAST_SIGNAL] = {0};
 
@@ -326,7 +360,7 @@ gtk_spin_button_class_init (GtkSpinButtonClass *class)
   widget_class->focus_out_event = gtk_spin_button_focus_out;
   widget_class->grab_notify = gtk_spin_button_grab_notify;
   widget_class->state_flags_changed = gtk_spin_button_state_flags_changed;
-  widget_class->style_updated = gtk_spin_button_style_updated;
+  widget_class->direction_changed = gtk_spin_button_direction_changed;
 
   entry_class->activate = gtk_spin_button_activate;
   entry_class->get_text_area_size = gtk_spin_button_get_text_area_size;
@@ -404,13 +438,21 @@ gtk_spin_button_class_init (GtkSpinButtonClass *class)
                                     PROP_ORIENTATION,
                                     "orientation");
 
+  /**
+   * GtkSpinButton:shadow-type:
+   *
+   * Style of bevel around the sping button.
+   *
+   * Deprecated: 3.20: Use CSS to determine the style of the border;
+   *     the value of this syyle property is ignored.
+   */
   gtk_widget_class_install_style_property (widget_class,
                                            g_param_spec_enum ("shadow-type",
                                                               P_("Shadow Type"),
                                                               P_("Style of bevel around the spin button"),
                                                               GTK_TYPE_SHADOW_TYPE,
                                                               GTK_SHADOW_IN,
-                                                              GTK_PARAM_READABLE));
+                                                              GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
   /**
    * GtkSpinButton::input:
@@ -547,6 +589,7 @@ gtk_spin_button_class_init (GtkSpinButtonClass *class)
   add_spin_binding (binding_set, GDK_KEY_Page_Down, GDK_CONTROL_MASK, GTK_SCROLL_START);
 
   gtk_widget_class_set_accessible_type (widget_class, GTK_TYPE_SPIN_BUTTON_ACCESSIBLE);
+  gtk_widget_class_set_css_name (widget_class, "spinbutton");
 }
 
 static void
@@ -683,10 +726,68 @@ swipe_gesture_update (GtkGesture       *gesture,
 }
 
 static void
+node_style_changed_cb (GtkCssNode  *node,
+                       GtkCssStyle *old_style,
+                       GtkCssStyle *new_style,
+                       GtkWidget    *widget)
+{
+  GtkBitmask *changes;
+  static GtkBitmask *affects_size = NULL;
+
+  if (G_UNLIKELY (affects_size == NULL))
+    affects_size = _gtk_css_style_property_get_mask_affecting (GTK_CSS_AFFECTS_SIZE | GTK_CSS_AFFECTS_CLIP);
+
+  changes = _gtk_bitmask_new ();
+  changes = gtk_css_style_add_difference (changes, old_style, new_style);
+
+  if (_gtk_bitmask_intersects (changes, affects_size))
+    gtk_widget_queue_resize (widget);
+  else
+    gtk_widget_queue_draw (widget);
+
+  _gtk_bitmask_free (changes);
+}
+
+static void
+update_node_ordering (GtkSpinButton *spin_button)
+{
+  GtkSpinButtonPrivate *priv = spin_button->priv;
+  GtkCssNode *first, *middle, *last;
+  GtkCssNode *widget_node;
+
+  widget_node = gtk_widget_get_css_node (GTK_WIDGET (spin_button));
+
+  if (priv->orientation == GTK_ORIENTATION_HORIZONTAL)
+    {
+      if (gtk_widget_get_direction (GTK_WIDGET (spin_button)) == GTK_TEXT_DIR_LTR)
+        {
+          first = priv->entry_node;
+          middle = priv->down_node;
+          last = priv->up_node;
+        }
+      else
+        {
+          first = priv->up_node;
+          middle = priv->down_node;
+          last = priv->entry_node;
+        }
+    }
+  else
+    {
+      first = priv->up_node;
+      middle = priv->entry_node;
+      last = priv->down_node;
+    }
+
+  gtk_css_node_insert_before (widget_node, first, middle);
+  gtk_css_node_insert_after (widget_node, last, middle);
+}
+
+static void
 gtk_spin_button_init (GtkSpinButton *spin_button)
 {
   GtkSpinButtonPrivate *priv;
-  GtkStyleContext *context;
+  GtkCssNode *widget_node;
 
   spin_button->priv = gtk_spin_button_get_instance_private (spin_button);
   priv = spin_button->priv;
@@ -710,11 +811,37 @@ gtk_spin_button_init (GtkSpinButton *spin_button)
 
   priv->orientation = GTK_ORIENTATION_HORIZONTAL;
 
+  _gtk_orientable_set_style_classes (GTK_ORIENTABLE (spin_button));
+
+  widget_node = gtk_widget_get_css_node (GTK_WIDGET (spin_button));
+
+  priv->entry_node = gtk_css_node_new ();
+  gtk_css_node_set_name (priv->entry_node, I_("entry"));
+  gtk_css_node_set_parent (priv->entry_node, widget_node);
+  gtk_css_node_set_state (priv->entry_node, gtk_css_node_get_state (widget_node));
+  g_signal_connect_object (priv->entry_node, "style-changed", G_CALLBACK (node_style_changed_cb), spin_button, 0);
+  g_object_unref (priv->entry_node);
+
+  priv->down_node = gtk_css_node_new ();
+  gtk_css_node_set_name (priv->down_node, I_("button"));
+  gtk_css_node_set_parent (priv->down_node, widget_node);
+  gtk_css_node_add_class (priv->down_node, g_quark_from_static_string ("down"));
+  gtk_css_node_set_state (priv->down_node, gtk_css_node_get_state (widget_node));
+  g_signal_connect_object (priv->down_node, "style-changed", G_CALLBACK (node_style_changed_cb), spin_button, 0);
+  g_object_unref (priv->down_node);
+
+  priv->up_node = gtk_css_node_new ();
+  gtk_css_node_set_name (priv->up_node, I_("button"));
+  gtk_css_node_set_parent (priv->up_node, widget_node);
+  gtk_css_node_add_class (priv->up_node, g_quark_from_static_string ("up"));
+  gtk_css_node_set_state (priv->up_node, gtk_css_node_get_state (widget_node));
+  g_signal_connect_object (priv->up_node, "style-changed", G_CALLBACK (node_style_changed_cb), spin_button, 0);
+  g_object_unref (priv->up_node);
+
   gtk_spin_button_set_adjustment (spin_button, NULL);
 
-  context = gtk_widget_get_style_context (GTK_WIDGET (spin_button));
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_SPINBUTTON);
-  _gtk_orientable_set_style_classes (GTK_ORIENTABLE (spin_button));
+  update_node_ordering (spin_button);
+  update_node_state (spin_button);
 
   gtk_widget_add_events (GTK_WIDGET (spin_button), GDK_SCROLL_MASK);
 
@@ -735,12 +862,6 @@ gtk_spin_button_finalize (GObject *object)
   GtkSpinButtonPrivate *priv = spin_button->priv;
 
   gtk_spin_button_unset_adjustment (spin_button);
-
-  if (priv->down_panel_context)
-    g_object_unref (priv->down_panel_context);
-
-  if (priv->up_panel_context)
-    g_object_unref (priv->up_panel_context);
 
   g_object_unref (priv->swipe_gesture);
 
@@ -785,86 +906,20 @@ gtk_spin_button_unmap (GtkWidget *widget)
     }
 }
 
-static void
-gtk_spin_button_panel_nthchildize_context (GtkSpinButton *spin_button,
-                                           GtkStyleContext *context,
-                                           gboolean         is_down_panel)
-{
-  GtkSpinButtonPrivate *priv = spin_button->priv;
-  GtkWidget *widget = GTK_WIDGET (spin_button);
-  GtkWidgetPath *path, *siblings_path;
-  GtkTextDirection direction;
-  gint up_pos, down_pos;
-
-  /* We are a subclass of GtkEntry, which is not a GtkContainer, so we
-   * have to emulate what gtk_container_get_path_for_child() would do
-   * for the button panels
-   */
-  path = _gtk_widget_create_path (widget);
-  siblings_path = gtk_widget_path_new ();
-
-  if (priv->orientation == GTK_ORIENTATION_HORIZONTAL)
-    {
-      direction = gtk_widget_get_direction (widget);
-
-      /* flip children order for RTL */
-      if (direction == GTK_TEXT_DIR_RTL)
-        {
-          up_pos = gtk_widget_path_append_type (siblings_path, GTK_TYPE_SPIN_BUTTON);
-          down_pos = gtk_widget_path_append_type (siblings_path, GTK_TYPE_SPIN_BUTTON);
-          gtk_widget_path_append_type (siblings_path, GTK_TYPE_ENTRY);
-        }
-      else
-        {
-          gtk_widget_path_append_type (siblings_path, GTK_TYPE_ENTRY);
-          down_pos = gtk_widget_path_append_type (siblings_path, GTK_TYPE_SPIN_BUTTON);
-          up_pos = gtk_widget_path_append_type (siblings_path, GTK_TYPE_SPIN_BUTTON);
-        }
-    }
-  else
-    {
-      up_pos = gtk_widget_path_append_type (siblings_path, GTK_TYPE_SPIN_BUTTON);
-      gtk_widget_path_append_type (siblings_path, GTK_TYPE_ENTRY);
-      down_pos = gtk_widget_path_append_type (siblings_path, GTK_TYPE_SPIN_BUTTON);
-    }
-
-  gtk_widget_path_iter_add_class (siblings_path, up_pos, GTK_STYLE_CLASS_BUTTON);
-  gtk_widget_path_iter_add_class (siblings_path, down_pos, GTK_STYLE_CLASS_BUTTON);
-
-  /* this allows compatibility for themes that use .spinbutton.button */
-  gtk_widget_path_iter_add_class (siblings_path, up_pos, GTK_STYLE_CLASS_SPINBUTTON);
-  gtk_widget_path_iter_add_class (siblings_path, down_pos, GTK_STYLE_CLASS_SPINBUTTON);
-
-  if (is_down_panel)
-    gtk_widget_path_append_with_siblings (path, siblings_path, down_pos);
-  else
-    gtk_widget_path_append_with_siblings (path, siblings_path, up_pos);
-
-  gtk_style_context_set_path (context, path);
-  gtk_widget_path_unref (path);
-  gtk_widget_path_unref (siblings_path);
-}
-
 static gboolean
 gtk_spin_button_panel_at_limit (GtkSpinButton *spin_button,
-                                GdkWindow     *panel)
+                                gint           panel)
 {
   GtkSpinButtonPrivate *priv = spin_button->priv;
-  GdkWindow *effective_panel;
 
   if (priv->wrap)
     return FALSE;
 
-  if (gtk_adjustment_get_step_increment (priv->adjustment) > 0)
-    effective_panel = panel;
-  else
-    effective_panel = panel == priv->up_panel ? priv->down_panel : priv->up_panel;
-
-  if (effective_panel == priv->up_panel &&
+  if (panel == UP_PANEL &&
       (gtk_adjustment_get_upper (priv->adjustment) - gtk_adjustment_get_value (priv->adjustment) <= EPSILON))
     return TRUE;
 
-  if (effective_panel == priv->down_panel &&
+  if (panel == DOWN_PANEL &&
       (gtk_adjustment_get_value (priv->adjustment) - gtk_adjustment_get_lower (priv->adjustment) <= EPSILON))
     return TRUE;
 
@@ -873,7 +928,7 @@ gtk_spin_button_panel_at_limit (GtkSpinButton *spin_button,
 
 static GtkStateFlags
 gtk_spin_button_panel_get_state (GtkSpinButton *spin_button,
-                                 GdkWindow *panel)
+                                 gint           panel)
 {
   GtkStateFlags state;
   GtkSpinButtonPrivate *priv = spin_button->priv;
@@ -890,9 +945,15 @@ gtk_spin_button_panel_get_state (GtkSpinButton *spin_button,
     }
   else
     {
-      if (priv->click_child == panel)
+      GdkWindow *panel_win;
+
+      panel_win = panel == UP_PANEL ? priv->up_panel : priv->down_panel;
+
+      if (priv->click_child &&
+          priv->click_child == panel_win)
         state |= GTK_STATE_FLAG_ACTIVE;
-      else if (priv->in_child == panel &&
+      else if (priv->in_child &&
+               priv->in_child == panel_win &&
                priv->click_child == NULL)
         state |= GTK_STATE_FLAG_PRELIGHT;
     }
@@ -900,50 +961,41 @@ gtk_spin_button_panel_get_state (GtkSpinButton *spin_button,
   return state;
 }
 
-static GtkStyleContext *
-gtk_spin_button_panel_get_context (GtkSpinButton *spin_button,
-                                   GdkWindow     *panel)
+static void
+update_node_state (GtkSpinButton *spin_button)
 {
   GtkSpinButtonPrivate *priv = spin_button->priv;
-  GtkStyleContext **contextp;
 
-  contextp = (panel == priv->down_panel) ?
-    &priv->down_panel_context : &priv->up_panel_context;
-
-  if (*contextp == NULL)
-    {
-      *contextp = gtk_style_context_new ();
-      gtk_spin_button_panel_nthchildize_context (spin_button, *contextp,
-                                                 panel == priv->down_panel);
-    }
-
-  gtk_style_context_set_screen (*contextp, gtk_widget_get_screen (GTK_WIDGET (spin_button)));
-  gtk_style_context_set_state (*contextp, gtk_spin_button_panel_get_state (spin_button, panel));
-
-  return *contextp;
+  gtk_css_node_set_state (priv->up_node,
+                          gtk_spin_button_panel_get_state (spin_button, UP_PANEL));
+  gtk_css_node_set_state (priv->down_node,
+                          gtk_spin_button_panel_get_state (spin_button, DOWN_PANEL));
 }
-
-#include "gtkcsssectionprivate.h"
 
 static void
 gtk_spin_button_panel_get_size (GtkSpinButton *spin_button,
-                                GdkWindow *panel,
-                                gint *width,
-                                gint *height)
+                                GdkWindow     *panel,
+                                gint          *width,
+                                gint          *height)
 {
+  GtkSpinButtonPrivate *priv = spin_button->priv;
   GtkBorder button_padding, button_border;
   GtkStyleContext *context;
-  GtkStateFlags state;
   gint icon_size, w, h;
 
   gtk_icon_size_lookup (GTK_ICON_SIZE_MENU, &w, &h);
   icon_size = MAX (w, h);
 
-  context = gtk_spin_button_panel_get_context (spin_button, panel);
-  state = gtk_style_context_get_state (context);
+  context = gtk_widget_get_style_context (GTK_WIDGET (spin_button));
+  if (panel == priv->up_panel)
+    gtk_style_context_save_to_node (context, priv->up_node);
+  else
+    gtk_style_context_save_to_node (context, priv->down_node);
 
-  gtk_style_context_get_padding (context, state, &button_padding);
-  gtk_style_context_get_border (context, state, &button_border);
+  gtk_style_context_get_padding (context, gtk_style_context_get_state (context), &button_padding);
+  gtk_style_context_get_border (context, gtk_style_context_get_state (context), &button_border);
+
+  gtk_style_context_restore (context);
 
   if (width)
     *width = icon_size + button_padding.left + button_padding.right +
@@ -1039,11 +1091,10 @@ gtk_spin_button_panel_draw (GtkSpinButton   *spin_button,
   GtkIconHelper *icon_helper;
 
   widget = GTK_WIDGET (spin_button);
+  context = gtk_widget_get_style_context (widget);
 
   cairo_save (cr);
   gtk_cairo_transform_to_window (cr, widget, panel);
-
-  context = gtk_spin_button_panel_get_context (spin_button, panel);
 
   height = gdk_window_get_height (panel);
   width = gdk_window_get_width (panel);
@@ -1053,24 +1104,28 @@ gtk_spin_button_panel_draw (GtkSpinButton   *spin_button,
   _gtk_icon_helper_set_use_fallback (icon_helper, TRUE);
 
   if (panel == priv->down_panel)
-    _gtk_icon_helper_set_icon_name (icon_helper, "list-remove-symbolic", GTK_ICON_SIZE_MENU);
+    {
+      gtk_style_context_save_to_node (context, priv->down_node);
+      _gtk_icon_helper_set_icon_name (icon_helper, "list-remove-symbolic", GTK_ICON_SIZE_MENU);
+    }
   else
-    _gtk_icon_helper_set_icon_name (icon_helper, "list-add-symbolic", GTK_ICON_SIZE_MENU);
+    {
+      gtk_style_context_save_to_node (context, priv->up_node);
+      _gtk_icon_helper_set_icon_name (icon_helper, "list-add-symbolic", GTK_ICON_SIZE_MENU);
+    }
 
-  _gtk_icon_helper_get_size (icon_helper, context,
-                             &icon_width, &icon_height);
+  _gtk_icon_helper_get_size (icon_helper, context, &icon_width, &icon_height);
 
-  gtk_render_background (context, cr,
-                         0, 0, width, height);
-  gtk_render_frame (context, cr,
-                    0, 0, width, height);
+  gtk_render_background (context, cr, 0, 0, width, height);
+  gtk_render_frame (context, cr, 0, 0, width, height);
 
   x = floor ((width - icon_width) / 2.0);
   y = floor ((height - icon_height) / 2.0);
 
-  _gtk_icon_helper_draw (icon_helper, context, cr,
-                         x, y);
+  _gtk_icon_helper_draw (icon_helper, context, cr, x, y);
   cairo_restore (cr);
+
+  gtk_style_context_restore (context);
 
   g_object_unref (icon_helper);
 }
@@ -1168,6 +1223,7 @@ adjustment_changed_cb (GtkAdjustment *adjustment, gpointer data)
   GtkSpinButtonPrivate *priv = spin_button->priv;
 
   priv->timer_step = gtk_adjustment_get_step_increment (priv->adjustment);
+  update_node_state (spin_button);
   gtk_widget_queue_resize (GTK_WIDGET (spin_button));
 }
 
@@ -1189,8 +1245,8 @@ gtk_spin_button_unset_adjustment (GtkSpinButton *spin_button)
 }
 
 static void
-gtk_spin_button_set_orientation (GtkSpinButton *spin,
-                                 GtkOrientation orientation)
+gtk_spin_button_set_orientation (GtkSpinButton  *spin,
+                                 GtkOrientation  orientation)
 {
   GtkEntry *entry = GTK_ENTRY (spin);
   GtkSpinButtonPrivate *priv = spin->priv;
@@ -1208,6 +1264,8 @@ gtk_spin_button_set_orientation (GtkSpinButton *spin,
   else if (priv->orientation == GTK_ORIENTATION_HORIZONTAL &&
            gtk_entry_get_alignment (entry) == 0.5)
     gtk_entry_set_alignment (entry, 0.0);
+
+  update_node_ordering (spin);
 
   g_object_notify (G_OBJECT (spin), "orientation");
   gtk_widget_queue_resize (GTK_WIDGET (spin));
@@ -1343,6 +1401,7 @@ gtk_spin_button_size_allocate (GtkWidget     *widget,
   GtkAllocation down_panel_allocation, up_panel_allocation;
 
   gtk_widget_set_allocation (widget, allocation);
+
   GTK_WIDGET_CLASS (gtk_spin_button_parent_class)->size_allocate (widget, allocation);
 
   gtk_spin_button_panel_get_allocations (spin, &down_panel_allocation, &up_panel_allocation);
@@ -1366,8 +1425,8 @@ gtk_spin_button_size_allocate (GtkWidget     *widget,
 }
 
 static gint
-gtk_spin_button_draw (GtkWidget      *widget,
-                      cairo_t        *cr)
+gtk_spin_button_draw (GtkWidget *widget,
+                      cairo_t   *cr)
 {
   GtkSpinButton *spin = GTK_SPIN_BUTTON (widget);
   GtkSpinButtonPrivate *priv = spin->priv;
@@ -1388,10 +1447,11 @@ gtk_spin_button_enter_notify (GtkWidget        *widget,
   GtkSpinButton *spin = GTK_SPIN_BUTTON (widget);
   GtkSpinButtonPrivate *priv = spin->priv;
 
-  if ((event->window == priv->down_panel) ||
-      (event->window == priv->up_panel))
+  if (event->window == priv->down_panel ||
+      event->window == priv->up_panel)
     {
       priv->in_child = event->window;
+      update_node_state (spin);
       gtk_widget_queue_draw (GTK_WIDGET (spin));
     }
 
@@ -1408,6 +1468,7 @@ gtk_spin_button_leave_notify (GtkWidget        *widget,
   if (priv->in_child != NULL)
     {
       priv->in_child = NULL;
+      update_node_state (spin);
       gtk_widget_queue_draw (GTK_WIDGET (spin));
     }
 
@@ -1442,31 +1503,16 @@ gtk_spin_button_state_flags_changed (GtkWidget     *widget,
                                      GtkStateFlags  previous_state)
 {
   GtkSpinButton *spin = GTK_SPIN_BUTTON (widget);
+  GtkSpinButtonPrivate *priv = spin->priv;
 
   if (!gtk_widget_is_sensitive (widget))
     {
       if (gtk_spin_button_stop_spinning (spin))
         gtk_widget_queue_draw (GTK_WIDGET (spin));
     }
-}
 
-static void
-gtk_spin_button_style_updated (GtkWidget *widget)
-{
-  GtkSpinButton *spin = GTK_SPIN_BUTTON (widget);
-  GtkSpinButtonPrivate *priv = spin->priv;
-
-  if (priv->down_panel_context)
-    gtk_spin_button_panel_nthchildize_context (spin,
-                                               priv->down_panel_context,
-                                               TRUE);
-
-  if (priv->up_panel_context)
-    gtk_spin_button_panel_nthchildize_context (spin,
-                                               priv->up_panel_context,
-                                               FALSE);
-
-  GTK_WIDGET_CLASS (gtk_spin_button_parent_class)->style_updated (widget);
+  gtk_css_node_set_state (priv->entry_node, gtk_widget_get_state_flags (widget));
+  update_node_state (spin);
 }
 
 static gint
@@ -1613,6 +1659,8 @@ gtk_spin_button_button_release (GtkWidget      *widget,
                 gtk_spin_button_real_spin (spin, diff);
             }
         }
+
+      update_node_state (spin);
       gtk_widget_queue_draw (GTK_WIDGET (spin));
 
       return TRUE;
@@ -1705,6 +1753,8 @@ gtk_spin_button_value_changed (GtkAdjustment *adjustment,
     gtk_spin_button_default_output (spin_button);
 
   g_signal_emit (spin_button, spinbutton_signals[VALUE_CHANGED], 0);
+
+  update_node_state (spin_button);
 
   gtk_widget_queue_draw (GTK_WIDGET (spin_button));
 
@@ -1867,11 +1917,11 @@ gtk_spin_button_get_text_area_size (GtkEntry *entry,
 
   GTK_ENTRY_CLASS (gtk_spin_button_parent_class)->get_text_area_size (entry, x, y, width, height);
 
+  gtk_spin_button_panel_get_size (GTK_SPIN_BUTTON (entry), priv->up_panel, &up_panel_width, &up_panel_height);
+  gtk_spin_button_panel_get_size (GTK_SPIN_BUTTON (entry), priv->down_panel, &down_panel_width, &down_panel_height);
+
   if (priv->orientation == GTK_ORIENTATION_HORIZONTAL)
     {
-      gtk_spin_button_panel_get_size (GTK_SPIN_BUTTON (entry), priv->up_panel, &up_panel_width, &up_panel_height);
-      gtk_spin_button_panel_get_size (GTK_SPIN_BUTTON (entry), priv->down_panel, &down_panel_width, &down_panel_height);
-
       if (gtk_widget_get_direction (GTK_WIDGET (entry)) == GTK_TEXT_DIR_RTL)
         {
           if (x)
@@ -2804,13 +2854,22 @@ gtk_spin_button_update (GtkSpinButton *spin_button)
 }
 
 void
-_gtk_spin_button_get_panels (GtkSpinButton *spin_button,
-                             GdkWindow **down_panel,
-                             GdkWindow **up_panel)
+_gtk_spin_button_get_panels (GtkSpinButton  *spin_button,
+                             GdkWindow     **down_panel,
+                             GdkWindow     **up_panel)
 {
   if (down_panel != NULL)
     *down_panel = spin_button->priv->down_panel;
 
   if (up_panel != NULL)
     *up_panel = spin_button->priv->up_panel;
+}
+
+static void
+gtk_spin_button_direction_changed (GtkWidget        *widget,
+                                   GtkTextDirection  previous_dir)
+{
+  update_node_ordering (GTK_SPIN_BUTTON (widget));
+
+  GTK_WIDGET_CLASS (gtk_spin_button_parent_class)->direction_changed (widget, previous_dir);
 }

@@ -1433,7 +1433,6 @@ gtk_bindings_activate_list (GObject  *object,
 {
   GtkStyleContext *context;
   GtkBindingSet *binding_set;
-  GtkStateFlags state;
   gboolean handled = FALSE;
   gboolean unbound = FALSE;
   GPtrArray *array;
@@ -1442,10 +1441,9 @@ gtk_bindings_activate_list (GObject  *object,
     return FALSE;
 
   context = gtk_widget_get_style_context (GTK_WIDGET (object));
-  state = gtk_widget_get_state_flags (GTK_WIDGET (object));
 
-  gtk_style_context_get (context, state,
-                         "gtk-key-bindings", &array,
+  gtk_style_context_get (context, gtk_style_context_get_state (context),
+                         "-gtk-key-bindings", &array,
                          NULL);
   if (array)
     {

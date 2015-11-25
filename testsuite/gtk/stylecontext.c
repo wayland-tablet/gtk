@@ -12,6 +12,7 @@ test_parse_selectors (void)
     "E {}",
     "E F {}",
     "E > F {}",
+    "E + F {}",
     "E#id {}",
     "#id {}",
     "tab:first-child {}",
@@ -173,14 +174,14 @@ test_match (void)
   data = "* { color: #fff }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   data = "* { color: #f00 }\n"
          "GtkButton { color: #fff }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   data = "* { color: #f00 }\n"
@@ -188,14 +189,14 @@ test_match (void)
          "GtkWindow > GtkButton { color: #000 }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   data = "* { color: #f00 }\n"
          ".button { color: #fff }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   data = "* { color: #f00 }\n"
@@ -203,7 +204,7 @@ test_match (void)
          ".button { color: #fff }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   data = "* { color: #f00 }\n"
@@ -211,7 +212,7 @@ test_match (void)
          "GtkWindow GtkButton { color: #fff }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   data = "* { color: #f00 }\n"
@@ -219,7 +220,7 @@ test_match (void)
          "GtkWindow .button { color: #fff }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   data = "* { color: #f00 }\n"
@@ -227,7 +228,7 @@ test_match (void)
          "#mywindow .button { color: #fff }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   data = "* { color: #f00 }\n"
@@ -235,7 +236,7 @@ test_match (void)
          "GtkWindow#mywindow .button { color: #fff }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   data = "* { color: #f00 }\n"
@@ -243,7 +244,7 @@ test_match (void)
          "GObject .button { color: #fff }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   data = "* { color: #f00 }\n"
@@ -252,7 +253,7 @@ test_match (void)
          "GtkWindow:active .button { color: #fff }";
   gtk_css_provider_load_from_data (provider, data, -1, &error);
   g_assert_no_error (error);
-  gtk_style_context_get_color (context, GTK_STATE_FLAG_NORMAL, &color);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
   g_assert (gdk_rgba_equal (&color, &expected));
 
   g_object_unref (provider);
@@ -273,7 +274,7 @@ test_basic_properties (void)
   gtk_style_context_set_path (context, path);
   gtk_widget_path_free (path);
 
-  gtk_style_context_get (context, 0,
+  gtk_style_context_get (context, gtk_style_context_get_state (context),
                          "color", &color,
                          "background-color", &bg_color,
                          "font", &font,
@@ -406,6 +407,29 @@ test_style_classes (void)
   g_object_unref (context);
 }
 
+void
+test_new_css_property (void)
+{
+  GtkWidget *widget;
+  GtkStyleContext *context;
+  GtkBorder padding;
+
+  widget = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+  gtk_widget_realize (widget);
+  context = gtk_widget_get_style_context (widget);
+
+  gtk_style_context_get_padding (context, gtk_style_context_get_state (context), &padding);
+
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+  gtk_style_properties_register_property (NULL,
+                                          g_param_spec_int ("test", "test", "test",
+                                                            0, G_MAXINT, 42, G_PARAM_READWRITE));
+G_GNUC_END_IGNORE_DEPRECATIONS;
+
+  gtk_style_context_add_class (context, "nonexisting");
+  gtk_style_context_get_padding (context, gtk_style_context_get_state (context), &padding);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -420,6 +444,7 @@ main (int argc, char *argv[])
   g_test_add_func ("/style/set-widget-path-saved", test_set_widget_path_saved);
   g_test_add_func ("/style/widget-path-parent", test_widget_path_parent);
   g_test_add_func ("/style/classes", test_style_classes);
+  g_test_add_func ("/style/new-css-property", test_new_css_property);
 
   return g_test_run ();
 }

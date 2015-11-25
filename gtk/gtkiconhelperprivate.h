@@ -20,9 +20,8 @@
 #ifndef __GTK_ICON_HELPER_H__
 #define __GTK_ICON_HELPER_H__
 
-#include <glib-object.h>
-
-#include <gtk/gtk.h>
+#include "gtk/gtkimage.h"
+#include "gtk/gtktypes.h"
 
 G_BEGIN_DECLS
 
@@ -82,7 +81,6 @@ void _gtk_icon_helper_set_pixbuf (GtkIconHelper *self,
 				  GdkPixbuf *pixbuf);
 void _gtk_icon_helper_set_pixbuf_scale (GtkIconHelper *self,
 					int scale);
-int  _gtk_icon_helper_get_pixbuf_scale (GtkIconHelper *self);
 void _gtk_icon_helper_set_animation (GtkIconHelper *self,
                                      GdkPixbufAnimation *animation);
 void _gtk_icon_helper_set_icon_set (GtkIconHelper *self,

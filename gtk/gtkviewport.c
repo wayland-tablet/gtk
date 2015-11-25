@@ -45,7 +45,7 @@
  *
  * The #GtkViewport widget acts as an adaptor class, implementing
  * scrollability for child widgets that lack their own scrolling
- * capabilities. Use #GtkViewport to scroll child widgets such as
+ * capabilities. Use GtkViewport to scroll child widgets such as
  * #GtkGrid, #GtkBox, and so on.
  *
  * If a widget has native scrolling abilities, such as #GtkTextView,
@@ -56,8 +56,12 @@
  * implement #GtkScrollable is added to a #GtkScrolledWindow, so you can
  * ignore the presence of the viewport.
  *
- * The #GtkViewport will start scrolling content only if allocated less
+ * The GtkViewport will start scrolling content only if allocated less
  * than the child widget’s minimum size in a given orientation.
+ *
+ * # CSS nodes
+ *
+ * GtkViewport has a single CSS node with name viewport.
  */
 
 struct _GtkViewportPrivate
@@ -179,6 +183,8 @@ gtk_viewport_class_init (GtkViewportClass *class)
 						      GTK_TYPE_SHADOW_TYPE,
 						      GTK_SHADOW_IN,
 						      GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
+
+  gtk_widget_class_set_css_name (widget_class, "viewport");
 }
 
 static void
@@ -364,7 +370,7 @@ viewport_get_view_allocation (GtkViewport   *viewport,
   view_allocation->y = 0;
 
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
 
   gtk_style_context_get_padding (context, state, &padding);
   gtk_style_context_get_border (context, state, &border);
@@ -1010,7 +1016,6 @@ gtk_viewport_get_preferred_size (GtkWidget      *widget,
   GtkViewport *viewport = GTK_VIEWPORT (widget);
   GtkViewportPrivate *priv = viewport->priv;
   GtkStyleContext *context;
-  GtkStateFlags state;
   GtkBorder padding, border;
   GtkWidget *child;
   gint       child_min, child_nat;
@@ -1021,12 +1026,11 @@ gtk_viewport_get_preferred_size (GtkWidget      *widget,
   minimum = 2 * gtk_container_get_border_width (GTK_CONTAINER (widget));
 
   context = gtk_widget_get_style_context (GTK_WIDGET (widget));
-  state = gtk_widget_get_state_flags (GTK_WIDGET (widget));
-  gtk_style_context_get_padding (context, state, &padding);
+  gtk_style_context_get_padding (context, gtk_style_context_get_state (context), &padding);
 
   if (priv->shadow_type != GTK_SHADOW_NONE)
     {
-      gtk_style_context_get_border (context, state, &border);
+      gtk_style_context_get_border (context, gtk_style_context_get_state (context), &border);
 
       if (orientation == GTK_ORIENTATION_HORIZONTAL)
         {

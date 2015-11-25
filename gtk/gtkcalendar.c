@@ -385,8 +385,6 @@ gtk_calendar_class_init (GtkCalendarClass *class)
   widget_class->drag_drop = gtk_calendar_drag_drop;
   widget_class->drag_data_received = gtk_calendar_drag_data_received;
 
-  gtk_widget_class_set_accessible_role (widget_class, ATK_ROLE_CALENDAR);
-
   /**
    * GtkCalendar:year:
    *
@@ -680,6 +678,9 @@ gtk_calendar_class_init (GtkCalendarClass *class)
                   NULL, NULL,
                   _gtk_marshal_VOID__VOID,
                   G_TYPE_NONE, 0);
+
+  gtk_widget_class_set_accessible_role (widget_class, ATK_ROLE_CALENDAR);
+  gtk_widget_class_set_css_name (widget_class, "calendar");
 }
 
 static void
@@ -1085,7 +1086,7 @@ get_component_paddings (GtkCalendar *calendar,
 
   widget = GTK_WIDGET (calendar);
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
 
   if (padding)
     gtk_style_context_get_padding (context, state, padding);

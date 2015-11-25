@@ -46,6 +46,10 @@
  * setting.
  *
  * The GtkStack widget was added in GTK+ 3.10.
+ *
+ * # CSS nodes
+ *
+ * GtkStack has a single CSS node named stack.
  */
 
 /**
@@ -210,6 +214,12 @@ G_DEFINE_TYPE_WITH_PRIVATE (GtkStack, gtk_stack, GTK_TYPE_CONTAINER)
 static void
 gtk_stack_init (GtkStack *stack)
 {
+  GtkStackPrivate *priv = gtk_stack_get_instance_private (stack);
+
+  priv->vhomogeneous = TRUE;
+  priv->hhomogeneous = TRUE;
+  priv->transition_duration = 200;
+  priv->transition_type = GTK_STACK_TRANSITION_TYPE_NONE;
 }
 
 static void
@@ -434,7 +444,7 @@ gtk_stack_class_init (GtkStackClass *klass)
   stack_props[PROP_HHOMOGENEOUS] =
       g_param_spec_boolean ("hhomogeneous", P_("Horizontally homogeneous"), P_("Horizontally homogeneous sizing"),
                             TRUE,
-                            GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
   /**
    * GtkStack:vhomogeneous:
@@ -446,7 +456,7 @@ gtk_stack_class_init (GtkStackClass *klass)
   stack_props[PROP_VHOMOGENEOUS] =
       g_param_spec_boolean ("vhomogeneous", P_("Vertically homogeneous"), P_("Vertically homogeneous sizing"),
                             TRUE,
-                            GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
   stack_props[PROP_VISIBLE_CHILD] =
       g_param_spec_object ("visible-child", P_("Visible child"), P_("The widget currently visible in the stack"),
                            GTK_TYPE_WIDGET,
@@ -458,11 +468,11 @@ gtk_stack_class_init (GtkStackClass *klass)
   stack_props[PROP_TRANSITION_DURATION] =
       g_param_spec_uint ("transition-duration", P_("Transition duration"), P_("The animation duration, in milliseconds"),
                          0, G_MAXUINT, 200,
-                         GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
   stack_props[PROP_TRANSITION_TYPE] =
       g_param_spec_enum ("transition-type", P_("Transition type"), P_("The type of animation used to transition"),
                          GTK_TYPE_STACK_TRANSITION_TYPE, GTK_STACK_TRANSITION_TYPE_NONE,
-                         GTK_PARAM_READWRITE | G_PARAM_CONSTRUCT | G_PARAM_EXPLICIT_NOTIFY);
+                         GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
   stack_props[PROP_TRANSITION_RUNNING] =
       g_param_spec_boolean ("transition-running", P_("Transition running"), P_("Whether or not the transition is currently running"),
                             FALSE,
@@ -470,7 +480,7 @@ gtk_stack_class_init (GtkStackClass *klass)
   stack_props[PROP_INTERPOLATE_SIZE] =
       g_param_spec_boolean ("interpolate-size", P_("Interpolate size"), P_("Whether or not the size should smoothly change when changing between differently sized children"),
                             FALSE,
-                            GTK_PARAM_READABLE);
+                            GTK_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY);
 
 
   g_object_class_install_properties (object_class, LAST_PROP, stack_props);
@@ -522,6 +532,8 @@ gtk_stack_class_init (GtkStackClass *klass)
                          GTK_PARAM_READWRITE);
 
   gtk_container_class_install_child_properties (container_class, LAST_CHILD_PROP, stack_child_props);
+
+  gtk_widget_class_set_css_name (widget_class, "stack");
 }
 
 /**
@@ -1087,14 +1099,12 @@ set_visible_child (GtkStack               *stack,
     {
       if (gtk_widget_is_visible (widget))
         {
-          int fake;
+          GtkAllocation allocation;
+
           priv->last_visible_child = priv->visible_child;
-          gtk_widget_get_preferred_width (priv->last_visible_child->widget,
-                                          &fake,
-                                          &priv->last_visible_widget_width);
-          gtk_widget_get_preferred_height (priv->last_visible_child->widget,
-                                          &fake,
-                                          &priv->last_visible_widget_height);
+          gtk_widget_get_allocated_size (priv->last_visible_child->widget, &allocation, NULL);
+          priv->last_visible_widget_width = allocation.width;
+          priv->last_visible_widget_height = allocation.height;
         }
       else
         {
@@ -1138,6 +1148,11 @@ set_visible_child (GtkStack               *stack,
 
       transition_type = get_simple_transition_type (i_first, transition_type);
     }
+
+  if (priv->hhomogeneous && priv->vhomogeneous)
+    gtk_widget_queue_allocate (widget);
+  else
+    gtk_widget_queue_resize (widget);
 
   g_object_notify_by_pspec (G_OBJECT (stack), stack_props[PROP_VISIBLE_CHILD]);
   g_object_notify_by_pspec (G_OBJECT (stack),
@@ -1324,7 +1339,7 @@ gtk_stack_remove (GtkContainer *container,
  * the argument. Returns %NULL if there is no child with this
  * name.
  *
- * Returns: (transfer none): the requested child of the #GtkStack
+ * Returns: (transfer none) (nullable): the requested child of the #GtkStack
  *
  * Since: 3.12
  */
@@ -1705,7 +1720,7 @@ gtk_stack_get_interpolate_size (GtkStack *stack)
  * Gets the currently visible child of @stack, or %NULL if
  * there are no visible children.
  *
- * Returns: (transfer none): the visible child of the #GtkStack
+ * Returns: (transfer none) (nullable): the visible child of the #GtkStack
  *
  * Since: 3.10
  */
@@ -1726,7 +1741,7 @@ gtk_stack_get_visible_child (GtkStack *stack)
  * Returns the name of the currently visible child of @stack, or
  * %NULL if there is no visible child.
  *
- * Returns: (transfer none): the name of the visible child of the #GtkStack
+ * Returns: (transfer none) (nullable): the name of the visible child of the #GtkStack
  *
  * Since: 3.10
  */

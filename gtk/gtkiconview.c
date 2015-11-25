@@ -44,6 +44,9 @@
 #include "gtktreednd.h"
 #include "gtktypebuiltins.h"
 #include "gtkprivate.h"
+#include "gtkcssnodeprivate.h"
+#include "gtkwidgetprivate.h"
+#include "gtkstylecontextprivate.h"
 #include "a11y/gtkiconviewaccessibleprivate.h"
 
 /**
@@ -62,6 +65,16 @@
  * opposed to a flat list where the mapping to icons is obvious),
  * #GtkIconView will only display the first level of the tree and
  * ignore the tree’s branches.
+ *
+ * # CSS nodes
+ *
+ * |[<!-- language="plain" -->
+ * iconview.view
+ * ╰── [rubberband]
+ * ]|
+ *
+ * GtkIconView has a single CSS node with name iconview and style class .view.
+ * For rubberband selection, a subnode with name rubberband is used.
  */
 
 #define SCROLL_EDGE_SIZE 15
@@ -661,20 +674,37 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
   g_object_class_override_property (gobject_class, PROP_VSCROLL_POLICY, "vscroll-policy");
 
   /* Style properties */
+  /**
+   * GtkIconView:selection-box-color:
+   *
+   * The color of the selection box.
+   *
+   * Deprecated: 3.20: The color of the selection box is determined by CSS;
+   *     the value of this style property is ignored.
+   */
   gtk_widget_class_install_style_property (widget_class,
                                            g_param_spec_boxed ("selection-box-color",
                                                                P_("Selection Box Color"),
                                                                P_("Color of the selection box"),
                                                                g_type_from_name ("GdkColor"),
-                                                               GTK_PARAM_READABLE));
+                                                               GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
+
+  /**
+   * GtkIconView:selection-box-alpha:
+   *
+   * The opacity of the selection box.
+   *
+   * Deprecated: 3.20: The opacity of the selection box is determined by CSS;
+   *     the value of this style property is ignored.
+   */
   gtk_widget_class_install_style_property (widget_class,
                                            g_param_spec_uchar ("selection-box-alpha",
                                                                P_("Selection Box Alpha"),
                                                                P_("Opacity of the selection box"),
                                                                0, 0xff,
                                                                0x40,
-                                                               GTK_PARAM_READABLE));
+                                                               GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
   /* Signals */
   /**
@@ -930,6 +960,7 @@ gtk_icon_view_class_init (GtkIconViewClass *klass)
 				  GTK_MOVEMENT_VISUAL_POSITIONS, -1);
 
   gtk_widget_class_set_accessible_type (widget_class, GTK_TYPE_ICON_VIEW_ACCESSIBLE);
+  gtk_widget_class_set_css_name (widget_class, "iconview");
 }
 
 static void
@@ -2532,35 +2563,48 @@ gtk_icon_view_start_rubberbanding (GtkIconView  *icon_view,
 				   gint          x,
 				   gint          y)
 {
+  GtkIconViewPrivate *priv = icon_view->priv;
   GList *items;
+  GtkCssNode *widget_node;
 
-  if (icon_view->priv->rubberband_device)
+  if (priv->rubberband_device)
     return;
 
-  for (items = icon_view->priv->items; items; items = items->next)
+  for (items = priv->items; items; items = items->next)
     {
       GtkIconViewItem *item = items->data;
 
       item->selected_before_rubberbanding = item->selected;
     }
-  
-  icon_view->priv->rubberband_x1 = x;
-  icon_view->priv->rubberband_y1 = y;
-  icon_view->priv->rubberband_x2 = x;
-  icon_view->priv->rubberband_y2 = y;
 
-  icon_view->priv->doing_rubberband = TRUE;
-  icon_view->priv->rubberband_device = device;
+  priv->rubberband_x1 = x;
+  priv->rubberband_y1 = y;
+  priv->rubberband_x2 = x;
+  priv->rubberband_y2 = y;
+
+  priv->doing_rubberband = TRUE;
+  priv->rubberband_device = device;
+
+  widget_node = gtk_widget_get_css_node (GTK_WIDGET (icon_view));
+  priv->rubberband_node = gtk_css_node_new ();
+  gtk_css_node_set_name (priv->rubberband_node, I_("rubberband"));
+  gtk_css_node_set_parent (priv->rubberband_node, widget_node);
+  gtk_css_node_set_state (priv->rubberband_node, gtk_css_node_get_state (widget_node));
+  g_object_unref (priv->rubberband_node);
 }
 
 static void
 gtk_icon_view_stop_rubberbanding (GtkIconView *icon_view)
 {
-  if (!icon_view->priv->doing_rubberband)
+  GtkIconViewPrivate *priv = icon_view->priv;
+
+  if (!priv->doing_rubberband)
     return;
 
-  icon_view->priv->doing_rubberband = FALSE;
-  icon_view->priv->rubberband_device = NULL;
+  priv->doing_rubberband = FALSE;
+  priv->rubberband_device = NULL;
+  gtk_css_node_set_parent (priv->rubberband_node, NULL);
+  priv->rubberband_node = NULL;
 
   gtk_widget_queue_draw (GTK_WIDGET (icon_view));
 }
@@ -3114,23 +3158,23 @@ gtk_icon_view_paint_item (GtkIconView     *icon_view,
 }
 
 static void
-gtk_icon_view_paint_rubberband (GtkIconView     *icon_view,
-				cairo_t         *cr)
+gtk_icon_view_paint_rubberband (GtkIconView *icon_view,
+				cairo_t     *cr)
 {
+  GtkIconViewPrivate *priv = icon_view->priv;
   GtkStyleContext *context;
   GdkRectangle rect;
 
   cairo_save (cr);
 
-  rect.x = MIN (icon_view->priv->rubberband_x1, icon_view->priv->rubberband_x2);
-  rect.y = MIN (icon_view->priv->rubberband_y1, icon_view->priv->rubberband_y2);
-  rect.width = ABS (icon_view->priv->rubberband_x1 - icon_view->priv->rubberband_x2) + 1;
-  rect.height = ABS (icon_view->priv->rubberband_y1 - icon_view->priv->rubberband_y2) + 1;
+  rect.x = MIN (priv->rubberband_x1, priv->rubberband_x2);
+  rect.y = MIN (priv->rubberband_y1, priv->rubberband_y2);
+  rect.width = ABS (priv->rubberband_x1 - priv->rubberband_x2) + 1;
+  rect.height = ABS (priv->rubberband_y1 - priv->rubberband_y2) + 1;
 
   context = gtk_widget_get_style_context (GTK_WIDGET (icon_view));
 
-  gtk_style_context_save (context);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_RUBBERBAND);
+  gtk_style_context_save_to_node (context, priv->rubberband_node);
 
   gdk_cairo_rectangle (cr, &rect);
   cairo_clip (cr);

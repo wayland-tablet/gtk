@@ -1,27 +1,24 @@
-/*
- *  GtkPlacesSidebar - sidebar widget for places in the filesystem
+/* GtkPlacesSidebar - sidebar widget for places in the filesystem
  *
- *  This code comes from Nautilus, GNOME’s file manager.
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
  *
- *  This library is free software; you can redistribute it and/or
- *  modify it under the terms of the GNU General Public License as
- *  published by the Free Software Foundation; either version 2 of the
- *  License, or (at your option) any later version.
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
  *
- *  This library is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- *  General Public License for more details.
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library. If not, see <http://www.gnu.org/licenses/>.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this library; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * This code is originally from Nautilus.
  *
- *  Authors : Mr Jamie McCracken (jamiemcc at blueyonder dot co dot uk)
- *            Cosimo Cecchi <cosimoc@gnome.org>
- *            Federico Mena Quintero <federico@gnome.org>
- *            Carlos Soriano <csoriano@gnome.org>
- *
+ * Authors : Mr Jamie McCracken (jamiemcc at blueyonder dot co dot uk)
+ *           Cosimo Cecchi <cosimoc@gnome.org>
+ *           Federico Mena Quintero <federico@gnome.org>
+ *           Carlos Soriano <csoriano@gnome.org>
  */
 
 #include "config.h"
@@ -90,6 +87,17 @@
  * user selects in the sidebar a location to open.  The application should also
  * call gtk_places_sidebar_set_location() when it changes the currently-viewed
  * location.
+ *
+ * # CSS nodes
+ *
+ * GtkPlacesSidebar uses a single CSS node with name placesidebar and style
+ * class .sidebar.
+ *
+ * Among the children of the places sidebar, the following style classes can
+ * be used:
+ * - .sidebar-new-bookmark-row for the 'Add new bookmark' row
+ * - .sidebar-placeholder-row for a row that is a placeholder
+ * - .has-open-popup when a popup is open for a row
  */
 
 /* These are used when a destination-side DND operation is taking place.
@@ -1708,7 +1716,7 @@ build_file_list_from_uris (const gchar **uris)
   gint i;
 
   result = NULL;
-  for (i = 0; uris[i]; i++)
+  for (i = 0; uris && uris[i]; i++)
     {
       GFile *file;
 
@@ -3808,8 +3816,6 @@ gtk_places_sidebar_init (GtkPlacesSidebar *sidebar)
   gboolean show_desktop;
   GtkStyleContext *context;
 
-  gtk_style_context_add_class (gtk_widget_get_style_context (GTK_WIDGET (sidebar)), GTK_STYLE_CLASS_SIDEBAR);
-
   sidebar->cancellable = g_cancellable_new ();
 
   sidebar->show_trash = TRUE;
@@ -3831,13 +3837,12 @@ gtk_places_sidebar_init (GtkPlacesSidebar *sidebar)
                                   GTK_POLICY_AUTOMATIC);
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (sidebar), GTK_SHADOW_IN);
 
-  gtk_style_context_set_junction_sides (gtk_widget_get_style_context (GTK_WIDGET (sidebar)),
-                                        GTK_JUNCTION_RIGHT | GTK_JUNCTION_LEFT);
+  context = gtk_widget_get_style_context (GTK_WIDGET (sidebar));
+  gtk_style_context_add_class (context, GTK_STYLE_CLASS_SIDEBAR);
+  gtk_style_context_set_junction_sides (context, GTK_JUNCTION_RIGHT | GTK_JUNCTION_LEFT);
 
   /* list box */
   sidebar->list_box = gtk_list_box_new ();
-  context = gtk_widget_get_style_context (sidebar->list_box);
-  gtk_style_context_add_class (context, "sidebar");
 
   gtk_list_box_set_header_func (GTK_LIST_BOX (sidebar->list_box),
                                 list_box_header_func, sidebar, NULL);
@@ -4125,9 +4130,9 @@ gtk_places_sidebar_dispose (GObject *object)
 static void
 gtk_places_sidebar_class_init (GtkPlacesSidebarClass *class)
 {
-  GObjectClass *gobject_class;
+  GObjectClass *gobject_class = G_OBJECT_CLASS (class);
+  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (class);
 
-  gobject_class = (GObjectClass *) class;
 
   gobject_class->dispose = gtk_places_sidebar_dispose;
   gobject_class->set_property = gtk_places_sidebar_set_property;
@@ -4451,6 +4456,8 @@ gtk_places_sidebar_class_init (GtkPlacesSidebarClass *class)
                                 G_PARAM_READWRITE);
 
   g_object_class_install_properties (gobject_class, NUM_PROPERTIES, properties);
+
+  gtk_widget_class_set_css_name (widget_class, "placessidebar");
 }
 
 /**

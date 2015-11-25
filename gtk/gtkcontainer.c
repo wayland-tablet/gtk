@@ -52,6 +52,7 @@
 #include "a11y/gtkcontaineraccessible.h"
 #include "a11y/gtkcontaineraccessibleprivate.h"
 #include "gtkpopovermenu.h"
+#include "gtkshortcutswindow.h"
 
 /**
  * SECTION:gtkcontainer
@@ -79,6 +80,16 @@
  * sizes and positions to their children. For example, a #GtkHBox arranges its
  * children in a horizontal row, and a #GtkGrid arranges the widgets it contains
  * in a two-dimensional grid.
+ *
+ * For implementations of #GtkContainer the virtual method #GtkContainerClass.forall()
+ * is always required, since it's used for drawing and other internal operations
+ * on the children.
+ * If the #GtkContainer implementation expect to have non internal children
+ * it's needed to implement both #GtkContainerClass.add() and #GtkContainerClass.remove().
+ * If the GtkContainer implementation has internal children, they should be added
+ * with gtk_widget_set_parent() on init() and removed with gtk_widget_unparent()
+ * in the #GtkWidgetClass.destroy() implementation.
+ * See more about implementing custom widgets at https://wiki.gnome.org/HowDoI/CustomWidgets
  *
  * # Height for width geometry management
  *
@@ -264,7 +275,6 @@ struct _GtkContainerPrivate
 
   guint has_focus_chain    : 1;
   guint reallocate_redraws : 1;
-  guint resize_pending     : 1;
   guint restyle_pending    : 1;
   guint resize_mode        : 2;
   guint request_mode       : 2;
@@ -1670,9 +1680,6 @@ gtk_container_destroy (GtkWidget *widget)
   GtkContainer *container = GTK_CONTAINER (widget);
   GtkContainerPrivate *priv = container->priv;
 
-  if (priv->resize_pending)
-    _gtk_container_dequeue_resize_handler (container);
-
   if (priv->restyle_pending)
     priv->restyle_pending = FALSE;
 
@@ -1873,7 +1880,7 @@ gtk_container_add (GtkContainer *container,
  * Note that @container will own a reference to @widget, and that this
  * may be the last reference held; so removing a widget from its
  * container can destroy that widget. If you want to use @widget
- * again, you need to add a reference to it while it’s not inside
+ * again, you need to add a reference to it before removing it from
  * a container, using g_object_ref(). If you don’t want to use @widget
  * again it’s usually more efficient to simply destroy it directly
  * using gtk_widget_destroy() since this will remove it from the
@@ -1888,7 +1895,10 @@ gtk_container_remove (GtkContainer *container,
   g_return_if_fail (_gtk_widget_get_parent (widget) == GTK_WIDGET (container) ||
                     GTK_IS_ASSISTANT (container) ||
                     GTK_IS_ACTION_BAR (container) ||
-                    GTK_IS_POPOVER_MENU (container));
+                    GTK_IS_POPOVER_MENU (container) ||
+                    GTK_IS_SHORTCUTS_GROUP (container) ||
+                    GTK_IS_SHORTCUTS_SECTION (container) ||
+                    GTK_IS_SHORTCUTS_WINDOW (container));
 
   g_object_ref (container);
   g_object_ref (widget);
@@ -1899,15 +1909,6 @@ gtk_container_remove (GtkContainer *container,
 
   g_object_unref (widget);
   g_object_unref (container);
-}
-
-void
-_gtk_container_dequeue_resize_handler (GtkContainer *container)
-{
-  g_return_if_fail (GTK_IS_CONTAINER (container));
-  g_return_if_fail (container->priv->resize_pending);
-
-  container->priv->resize_pending = FALSE;
 }
 
 /**
@@ -2020,13 +2021,12 @@ gtk_container_idle_sizer (GdkFrameClock *clock,
    * than trying to explicitly work around them with some extra flags,
    * since it doesn't cause any actual harm.
    */
-  if (container->priv->resize_pending)
+  if (gtk_widget_needs_allocate (GTK_WIDGET (container)))
     {
-      container->priv->resize_pending = FALSE;
       gtk_container_check_resize (container);
     }
 
-  if (!container->priv->restyle_pending && !container->priv->resize_pending)
+  if (!container->priv->restyle_pending && !gtk_widget_needs_allocate (GTK_WIDGET (container)))
     {
       _gtk_container_stop_idle_sizer (container);
     }
@@ -2068,7 +2068,7 @@ _gtk_container_stop_idle_sizer (GtkContainer *container)
   container->priv->resize_clock = NULL;
 }
 
-static void
+void
 gtk_container_queue_resize_handler (GtkContainer *container)
 {
   GtkWidget *widget;
@@ -2086,11 +2086,8 @@ gtk_container_queue_resize_handler (GtkContainer *container)
       switch (container->priv->resize_mode)
         {
         case GTK_RESIZE_QUEUE:
-          if (!container->priv->resize_pending)
-            {
-              container->priv->resize_pending = TRUE;
-              gtk_container_start_idle_sizer (container);
-            }
+          if (gtk_widget_needs_allocate (widget))
+            gtk_container_start_idle_sizer (container);
           break;
 
         case GTK_RESIZE_IMMEDIATE:
@@ -2103,32 +2100,6 @@ gtk_container_queue_resize_handler (GtkContainer *container)
           break;
         }
     }
-}
-
-static void
-_gtk_container_queue_resize_internal (GtkContainer *container,
-                                      gboolean      invalidate_only)
-{
-  GtkWidget *widget;
-
-  widget = (GtkWidget*)container;
-
-  do
-    {
-      _gtk_widget_set_alloc_needed (widget, TRUE);
-      _gtk_size_request_cache_clear (_gtk_widget_peek_request_cache (widget));
-
-      G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
-      if (((GtkContainer*)widget)->priv->resize_mode != GTK_RESIZE_PARENT)
-        break;
-      G_GNUC_END_IGNORE_DEPRECATIONS;
-
-      widget = _gtk_widget_get_parent (widget);
-    }
-  while (widget);
-
-  if (widget && !invalidate_only)
-    gtk_container_queue_resize_handler ((GtkContainer*)widget);
 }
 
 void
@@ -2147,40 +2118,15 @@ _gtk_container_queue_restyle (GtkContainer *container)
   priv->restyle_pending = TRUE;
 }
 
-/**
- * _gtk_container_queue_resize:
- * @container: a #GtkContainer
- *
- * Determines the “resize container” in the hierarchy above this container
- * (typically the toplevel, but other containers can be set as resize
- * containers with gtk_container_set_resize_mode()), marks the container
- * and all parents up to and including the resize container as needing
- * to have sizes recomputed, and if necessary adds the resize container
- * to the queue of containers that will be resized out at idle.
- */
-void
-_gtk_container_queue_resize (GtkContainer *container)
-{
-  _gtk_container_queue_resize_internal (container, FALSE);
-}
-
-/**
- * _gtk_container_resize_invalidate:
- * @container: a #GtkContainer
- *
- * Invalidates cached sizes like _gtk_container_queue_resize() but doesn't
- * actually queue the resize container for resize.
- */
-void
-_gtk_container_resize_invalidate (GtkContainer *container)
-{
-  _gtk_container_queue_resize_internal (container, TRUE);
-}
-
 void
 _gtk_container_maybe_start_idle_sizer (GtkContainer *container)
 {
-  if (container->priv->restyle_pending || container->priv->resize_pending)
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+  if (!GTK_IS_RESIZE_CONTAINER (container))
+    return;
+G_GNUC_END_IGNORE_DEPRECATIONS;
+
+  if (container->priv->restyle_pending || gtk_widget_needs_allocate (GTK_WIDGET (container)))
     gtk_container_start_idle_sizer (container);
 }
 
@@ -2198,27 +2144,33 @@ gtk_container_real_check_resize (GtkContainer *container)
   GtkWidget *widget = GTK_WIDGET (container);
   GtkAllocation allocation;
   GtkRequisition requisition;
+  int baseline;
 
-  gtk_widget_get_preferred_size (widget, &requisition, NULL);
-  _gtk_widget_get_allocation (widget, &allocation);
-
-  if (requisition.width > allocation.width ||
-      requisition.height > allocation.height)
+  if (_gtk_widget_get_alloc_needed (widget))
     {
-      G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
-      if (GTK_IS_RESIZE_CONTAINER (container))
+      gtk_widget_get_preferred_size (widget, &requisition, NULL);
+      gtk_widget_get_allocated_size (widget, &allocation, &baseline);
+
+      if (requisition.width > allocation.width ||
+          requisition.height > allocation.height)
         {
-          gtk_widget_size_allocate (widget, &allocation);
-          gtk_widget_set_allocation (widget, &allocation);
+          G_GNUC_BEGIN_IGNORE_DEPRECATIONS;
+          if (GTK_IS_RESIZE_CONTAINER (container))
+            {
+              gtk_widget_size_allocate (widget, &allocation);
+            }
+          else
+            gtk_widget_queue_resize (widget);
+          G_GNUC_END_IGNORE_DEPRECATIONS;
         }
       else
-        gtk_widget_queue_resize (widget);
-      G_GNUC_END_IGNORE_DEPRECATIONS;
+        {
+          gtk_widget_size_allocate_with_baseline (widget, &allocation, baseline);
+        }
     }
   else
     {
-      gtk_widget_size_allocate (widget, &allocation);
-      gtk_widget_set_allocation (widget, &allocation);
+      gtk_widget_ensure_allocate (widget);
     }
 }
 
@@ -2240,6 +2192,7 @@ gtk_container_resize_children (GtkContainer *container)
 {
   GtkAllocation allocation;
   GtkWidget *widget;
+  gint baseline;
 
   /* resizing invariants:
    * toplevels have *always* resize_mode != GTK_RESIZE_PARENT set.
@@ -2249,10 +2202,9 @@ gtk_container_resize_children (GtkContainer *container)
   g_return_if_fail (GTK_IS_CONTAINER (container));
 
   widget = GTK_WIDGET (container);
-  _gtk_widget_get_allocation (widget, &allocation);
+  gtk_widget_get_allocated_size (widget, &allocation, &baseline);
 
-  gtk_widget_size_allocate (widget, &allocation);
-  gtk_widget_set_allocation (widget, &allocation);
+  gtk_widget_size_allocate_with_baseline (widget, &allocation, baseline);
 }
 
 static void

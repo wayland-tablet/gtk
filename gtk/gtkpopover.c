@@ -71,6 +71,17 @@
  * </section>
  * ]|
  *
+ * # CSS nodes
+ *
+ * GtkPopover has a single css node called popover It always gets the
+ * .background style class and it gets the .menu style class if it is
+ * menu-like (e.g. #GtkPopoverMenu or created using gtk_popover_new_from_model().
+ *
+ * Particular uses of GtkPopover, such as touch selection popups
+ * or magnifiers in #GtkEntry or #GtkTextView get style classes
+ * like .touch-selection or .magnifier to differentiate from
+ * plain popovers.
+ *
  * Since: 3.12
  */
 
@@ -189,9 +200,8 @@ gtk_popover_init (GtkPopover *popover)
   popover->priv->tick_id = 0;
   popover->priv->transitions_enabled = TRUE;
 
-  context = gtk_widget_get_style_context (widget);
+  context = gtk_widget_get_style_context (GTK_WIDGET (popover));
   gtk_style_context_add_class (context, GTK_STYLE_CLASS_BACKGROUND);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_POPOVER);
 }
 
 static void
@@ -638,11 +648,11 @@ get_margin (GtkWidget *widget,
             GtkBorder *border)
 {
   GtkStyleContext *context;
-  GtkStateFlags state;
 
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
-  gtk_style_context_get_margin (context, state, border);
+  gtk_style_context_get_margin (context,
+                                gtk_style_context_get_state (context),
+                                border);
 }
 
 static void
@@ -665,9 +675,9 @@ gtk_popover_get_gap_coords (GtkPopover      *popover,
   GtkPositionType gap_side, pos;
   GtkAllocation allocation;
   gint border_radius;
-  GtkStateFlags state;
   GtkStyleContext *context;
   GtkBorder margin, border;
+  GtkStateFlags state;
 
   gtk_popover_get_pointing_to (popover, &rect);
   gtk_widget_get_allocation (widget, &allocation);
@@ -699,10 +709,11 @@ gtk_popover_get_gap_coords (GtkPopover      *popover,
   rect.y += gtk_widget_get_margin_top (widget);
 
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
 
   gtk_style_context_get_border (context, state, &border);
-  gtk_style_context_get (context, state,
+  gtk_style_context_get (context,
+                         state,
                          GTK_STYLE_PROPERTY_BORDER_RADIUS, &border_radius,
                          NULL);
   pos = get_effective_position (popover, priv->final_position);
@@ -1053,9 +1064,8 @@ gtk_popover_draw (GtkWidget *widget,
   GtkStateFlags state;
 
   context = gtk_widget_get_style_context (widget);
-  gtk_style_context_save (context);
 
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
   gtk_widget_get_allocation (widget, &allocation);
 
   gtk_style_context_get_border (context, state, &border);
@@ -1135,8 +1145,6 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   if (child)
     gtk_container_propagate_draw (GTK_CONTAINER (widget), child, cr);
 
-  gtk_style_context_restore (context);
-
   return TRUE;
 }
 
@@ -1150,7 +1158,7 @@ get_padding_and_border (GtkWidget *widget,
   GtkBorder tmp;
 
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
 
   border_width = gtk_container_get_border_width (GTK_CONTAINER (widget));
 
@@ -1170,7 +1178,7 @@ get_border_radius (GtkWidget *widget)
   gint border_radius;
 
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
   gtk_style_context_get (context, state,
                          GTK_STYLE_PROPERTY_BORDER_RADIUS, &border_radius,
                          NULL);
@@ -1363,6 +1371,9 @@ gtk_popover_check_invalidate_borders (GtkPopover *popover)
   GtkPositionType gap_side;
   gint tip_x, tip_y;
 
+  if (!priv->widget)
+    return;
+
   gtk_popover_get_gap_coords (popover, NULL, NULL,
                               &tip_x, &tip_y, NULL, NULL,
                               &gap_side);
@@ -1539,6 +1550,9 @@ gtk_popover_show (GtkWidget *widget)
 {
   GtkPopoverPrivate *priv = GTK_POPOVER (widget)->priv;
 
+  if (priv->window)
+    _gtk_window_raise_popover (priv->window, widget);
+
   priv->visible = TRUE;
 
   GTK_WIDGET_CLASS (gtk_popover_parent_class)->show (widget);
@@ -1694,6 +1708,7 @@ gtk_popover_class_init (GtkPopoverClass *klass)
 
   quark_widget_popovers = g_quark_from_static_string ("gtk-quark-widget-popovers");
   gtk_widget_class_set_accessible_type (widget_class, GTK_TYPE_POPOVER_ACCESSIBLE);
+  gtk_widget_class_set_css_name (widget_class, "popover");
 }
 
 static void
@@ -2397,12 +2412,16 @@ gtk_popover_new_from_model (GtkWidget  *relative_to,
                             GMenuModel *model)
 {
   GtkWidget *popover;
+  GtkStyleContext *style_context;
 
   g_return_val_if_fail (relative_to == NULL || GTK_IS_WIDGET (relative_to), NULL);
   g_return_val_if_fail (G_IS_MENU_MODEL (model), NULL);
 
   popover = gtk_popover_new (relative_to);
   gtk_popover_bind_model (GTK_POPOVER (popover), model, NULL);
+
+  style_context = gtk_widget_get_style_context (GTK_WIDGET (popover));
+  gtk_style_context_add_class (style_context, GTK_STYLE_CLASS_MENU);
 
   return popover;
 }

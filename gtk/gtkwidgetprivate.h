@@ -56,6 +56,7 @@ struct _GtkWidgetPrivate
   guint sensitive             : 1;
   guint can_focus             : 1;
   guint has_focus             : 1;
+  guint focus_on_click        : 1;
   guint can_default           : 1;
   guint has_default           : 1;
   guint receives_default      : 1;
@@ -72,7 +73,9 @@ struct _GtkWidgetPrivate
   guint in_reparent           : 1;
 
   /* Queue-resize related flags */
-  guint alloc_needed          : 1;
+  guint resize_needed         : 1; /* queue_resize() has been called but no get_preferred_size() yet */
+  guint alloc_needed          : 1; /* this widget needs a size_allocate() call */
+  guint alloc_needed_on_child : 1; /* 0 or more children - or this widget - need a size_allocate() call */
 
   /* Expand-related flags */
   guint need_compute_expand   : 1; /* Need to recompute computed_[hv]_expand */
@@ -130,6 +133,8 @@ struct _GtkWidgetPrivate
   GtkStyleContext *context;
 
   /* The widget's allocated size */
+  GtkAllocation allocated_size;
+  gint allocated_size_baseline;
   GtkAllocation allocation;
   GtkAllocation clip;
   gint allocated_baseline;
@@ -163,8 +168,10 @@ gboolean     _gtk_widget_get_shadowed       (GtkWidget *widget);
 void         _gtk_widget_set_shadowed       (GtkWidget *widget,
                                              gboolean   shadowed);
 gboolean     _gtk_widget_get_alloc_needed   (GtkWidget *widget);
-void         _gtk_widget_set_alloc_needed   (GtkWidget *widget,
-                                             gboolean   alloc_needed);
+gboolean     gtk_widget_needs_allocate      (GtkWidget *widget);
+void         gtk_widget_queue_resize_on_widget (GtkWidget *widget);
+void         gtk_widget_ensure_resize       (GtkWidget *widget);
+void         gtk_widget_ensure_allocate     (GtkWidget *widget);
 void         _gtk_widget_draw               (GtkWidget *widget,
 					     cairo_t   *cr);
 void          _gtk_widget_scale_changed     (GtkWidget *widget);
@@ -181,14 +188,6 @@ void         _gtk_widget_add_attached_window    (GtkWidget    *widget,
 void         _gtk_widget_remove_attached_window (GtkWidget    *widget,
                                                  GtkWindow    *window);
 
-void _gtk_widget_override_size_request (GtkWidget *widget,
-                                        int        width,
-                                        int        height,
-                                        int       *old_width,
-                                        int       *old_height);
-void _gtk_widget_restore_size_request  (GtkWidget *widget,
-                                        int        old_width,
-                                        int        old_height);
 void _gtk_widget_get_preferred_size_for_size   (GtkWidget         *widget,
                                                 GtkOrientation     orientation,
                                                 gint               size,
@@ -292,6 +291,12 @@ void              gtk_widget_set_csd_input_shape           (GtkWidget           
 gboolean          gtk_widget_has_size_request              (GtkWidget *widget);
 
 /* inline getters */
+
+static inline gboolean
+gtk_widget_get_resize_needed (GtkWidget *widget)
+{
+  return widget->priv->resize_needed;
+}
 
 static inline GtkWidget *
 _gtk_widget_get_parent (GtkWidget *widget)

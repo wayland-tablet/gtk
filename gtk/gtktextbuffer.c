@@ -2871,10 +2871,8 @@ gtk_text_buffer_remove_all_tags (GtkTextBuffer     *buffer,
  * Since the 3.20 version, if @line_number is greater than the number of lines
  * in the @buffer, the end iterator is returned. And if @char_offset is off the
  * end of the line, the iterator at the end of the line is returned.
- *
- * Returns: whether the exact position has been found (since 3.20).
  **/
-gboolean
+void
 gtk_text_buffer_get_iter_at_line_offset (GtkTextBuffer *buffer,
                                          GtkTextIter   *iter,
                                          gint           line_number,
@@ -2882,13 +2880,13 @@ gtk_text_buffer_get_iter_at_line_offset (GtkTextBuffer *buffer,
 {
   GtkTextIter end_line_iter;
 
-  g_return_val_if_fail (iter != NULL, FALSE);
-  g_return_val_if_fail (GTK_IS_TEXT_BUFFER (buffer), FALSE);
+  g_return_if_fail (iter != NULL);
+  g_return_if_fail (GTK_IS_TEXT_BUFFER (buffer));
 
   if (line_number >= gtk_text_buffer_get_line_count (buffer))
     {
       gtk_text_buffer_get_end_iter (buffer, iter);
-      return FALSE;
+      return;
     }
 
   _gtk_text_btree_get_iter_at_line_char (get_btree (buffer), iter, line_number, 0);
@@ -2897,14 +2895,10 @@ gtk_text_buffer_get_iter_at_line_offset (GtkTextBuffer *buffer,
   if (!gtk_text_iter_ends_line (&end_line_iter))
     gtk_text_iter_forward_to_line_end (&end_line_iter);
 
-  if (char_offset > gtk_text_iter_get_line_offset (&end_line_iter))
-    {
-      *iter = end_line_iter;
-      return FALSE;
-    }
-
-  gtk_text_iter_set_line_offset (iter, char_offset);
-  return TRUE;
+  if (char_offset <= gtk_text_iter_get_line_offset (&end_line_iter))
+    gtk_text_iter_set_line_offset (iter, char_offset);
+  else
+    *iter = end_line_iter;
 }
 
 /**
@@ -2923,10 +2917,8 @@ gtk_text_buffer_get_iter_at_line_offset (GtkTextBuffer *buffer,
  * Since the 3.20 version, if @line_number is greater than the number of lines
  * in the @buffer, the end iterator is returned. And if @byte_index is off the
  * end of the line, the iterator at the end of the line is returned.
- *
- * Returns: whether the exact position has been found (since 3.20).
  **/
-gboolean
+void
 gtk_text_buffer_get_iter_at_line_index  (GtkTextBuffer *buffer,
                                          GtkTextIter   *iter,
                                          gint           line_number,
@@ -2934,13 +2926,13 @@ gtk_text_buffer_get_iter_at_line_index  (GtkTextBuffer *buffer,
 {
   GtkTextIter end_line_iter;
 
-  g_return_val_if_fail (iter != NULL, FALSE);
-  g_return_val_if_fail (GTK_IS_TEXT_BUFFER (buffer), FALSE);
+  g_return_if_fail (iter != NULL);
+  g_return_if_fail (GTK_IS_TEXT_BUFFER (buffer));
 
   if (line_number >= gtk_text_buffer_get_line_count (buffer))
     {
       gtk_text_buffer_get_end_iter (buffer, iter);
-      return FALSE;
+      return;
     }
 
   gtk_text_buffer_get_iter_at_line (buffer, iter, line_number);
@@ -2949,14 +2941,10 @@ gtk_text_buffer_get_iter_at_line_index  (GtkTextBuffer *buffer,
   if (!gtk_text_iter_ends_line (&end_line_iter))
     gtk_text_iter_forward_to_line_end (&end_line_iter);
 
-  if (byte_index > gtk_text_iter_get_line_index (&end_line_iter))
-    {
-      *iter = end_line_iter;
-      return FALSE;
-    }
-
-  gtk_text_iter_set_line_index (iter, byte_index);
-  return TRUE;
+  if (byte_index <= gtk_text_iter_get_line_index (&end_line_iter))
+    gtk_text_iter_set_line_index (iter, byte_index);
+  else
+    *iter = end_line_iter;
 }
 
 /**
@@ -2967,18 +2955,16 @@ gtk_text_buffer_get_iter_at_line_index  (GtkTextBuffer *buffer,
  *
  * Initializes @iter to the start of the given line. If @line_number is greater
  * than the number of lines in the @buffer, the end iterator is returned.
- *
- * Returns: whether the exact position has been found (since 3.20).
  **/
-gboolean
+void
 gtk_text_buffer_get_iter_at_line (GtkTextBuffer *buffer,
                                   GtkTextIter   *iter,
                                   gint           line_number)
 {
-  g_return_val_if_fail (iter != NULL, FALSE);
-  g_return_val_if_fail (GTK_IS_TEXT_BUFFER (buffer), FALSE);
+  g_return_if_fail (iter != NULL);
+  g_return_if_fail (GTK_IS_TEXT_BUFFER (buffer));
 
-  return gtk_text_buffer_get_iter_at_line_offset (buffer, iter, line_number, 0);
+  gtk_text_buffer_get_iter_at_line_offset (buffer, iter, line_number, 0);
 }
 
 /**

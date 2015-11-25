@@ -29,14 +29,12 @@
 
 #include "window.h"
 #include "prop-list.h"
-#include "classes-list.h"
 #include "css-editor.h"
 #include "css-node-tree.h"
 #include "object-hierarchy.h"
 #include "object-tree.h"
 #include "selector.h"
 #include "size-groups.h"
-#include "style-prop-list.h"
 #include "data-list.h"
 #include "signals-list.h"
 #include "actions.h"
@@ -65,12 +63,10 @@ set_selected_object (GtkInspectorWindow *iw,
     return FALSE;
 
   gtk_inspector_prop_list_set_object (GTK_INSPECTOR_PROP_LIST (iw->child_prop_list), selected);
-  gtk_inspector_style_prop_list_set_object (GTK_INSPECTOR_STYLE_PROP_LIST (iw->style_prop_list), selected);
   gtk_inspector_signals_list_set_object (GTK_INSPECTOR_SIGNALS_LIST (iw->signals_list), selected);
   gtk_inspector_object_hierarchy_set_object (GTK_INSPECTOR_OBJECT_HIERARCHY (iw->object_hierarchy), selected);
   gtk_inspector_selector_set_object (GTK_INSPECTOR_SELECTOR (iw->selector), selected);
   gtk_inspector_misc_info_set_object (GTK_INSPECTOR_MISC_INFO (iw->misc_info), selected);
-  gtk_inspector_classes_list_set_object (GTK_INSPECTOR_CLASSES_LIST (iw->classes_list), selected);
   gtk_inspector_css_editor_set_object (GTK_INSPECTOR_CSS_EDITOR (iw->widget_css_editor), selected);
   gtk_inspector_css_node_tree_set_object (GTK_INSPECTOR_CSS_NODE_TREE (iw->widget_css_node_tree), selected);
   gtk_inspector_size_groups_set_object (GTK_INSPECTOR_SIZE_GROUPS (iw->size_groups), selected);
@@ -177,7 +173,7 @@ gtk_inspector_window_init (GtkInspectorWindow *iw)
         {
           button = gtk_button_new_from_icon_name ("find-location-symbolic",
                                                   GTK_ICON_SIZE_MENU);
-          gtk_button_set_focus_on_click (GTK_BUTTON (button), FALSE);
+          gtk_widget_set_focus_on_click (button, FALSE);
           gtk_widget_set_halign (button, GTK_ALIGN_START);
           gtk_widget_set_valign (button, GTK_ALIGN_CENTER);
           g_signal_connect (button, "clicked",
@@ -227,8 +223,6 @@ gtk_inspector_window_class_init (GtkInspectorWindowClass *klass)
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, prop_list);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, child_prop_list);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, signals_list);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, classes_list);
-  gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, style_prop_list);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, widget_css_editor);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, widget_css_node_tree);
   gtk_widget_class_bind_template_child (widget_class, GtkInspectorWindow, object_hierarchy);

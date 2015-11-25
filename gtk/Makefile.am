@@ -168,6 +168,7 @@ gtk_public_h_sources = 		\
 	gtkdebug.h		\
 	gtkdialog.h		\
 	gtkdnd.h		\
+	gtkdragsource.h		\
 	gtkdrawingarea.h	\
 	gtkeditable.h		\
 	gtkentry.h		\
@@ -180,6 +181,7 @@ gtk_public_h_sources = 		\
 	gtkfilechooser.h	\
 	gtkfilechooserbutton.h	\
 	gtkfilechooserdialog.h	\
+	gtkfilechoosernative.h	\
 	gtkfilechooserwidget.h	\
 	gtkfilefilter.h		\
 	gtkfixed.h		\
@@ -229,6 +231,7 @@ gtk_public_h_sources = 		\
 	gtkmodelbutton.h	\
 	gtkmodules.h		\
 	gtkmountoperation.h	\
+	gtknativedialog.h	\
 	gtknotebook.h		\
 	gtkoffscreenwindow.h	\
 	gtkorientable.h		\
@@ -269,6 +272,11 @@ gtk_public_h_sources = 		\
 	gtkseparatormenuitem.h	\
 	gtkseparatortoolitem.h	\
 	gtksettings.h		\
+	gtkshortcutsgesture.h	\
+	gtkshortcutsgroup.h	\
+	gtkshortcutssection.h	\
+	gtkshortcutsshortcut.h	\
+	gtkshortcutswindow.h	\
 	gtkshow.h		\
 	gtkstacksidebar.h	\
 	gtksizegroup.h		\
@@ -362,6 +370,7 @@ gtk_private_h_sources =		\
 	gtkbuttonprivate.h	\
 	gtkcairoblurprivate.h	\
 	gtkcellareaboxcontextprivate.h	\
+	gtkcheckbuttonprivate.h	\
 	gtkclipboardprivate.h		\
 	gtkcolorswatchprivate.h	\
 	gtkcoloreditorprivate.h	\
@@ -433,8 +442,10 @@ gtk_private_h_sources =		\
 	gtkfilechooserembed.h	\
 	gtkfilechooserentry.h	\
 	gtkfilechooserprivate.h	\
+	gtkfilechoosernativeprivate.h	\
 	gtkfilechooserwidgetprivate.h	\
 	gtkfilechooserutils.h	\
+	gtkfilefilterprivate.h	\
 	gtkfilesystem.h		\
 	gtkfilesystemmodel.h	\
 	gtkfontchooserprivate.h	\
@@ -475,6 +486,7 @@ gtk_private_h_sources =		\
 	gtkmodifierstyle.h	\
 	gtkmodulesprivate.h	\
 	gtkmountoperationprivate.h \
+	gtknativedialogprivate.h \
 	gtkorientableprivate.h	\
 	gtkpango.h		\
 	gtkpathbar.h		\
@@ -503,8 +515,9 @@ gtk_private_h_sources =		\
 	gtksearchenginemodel.h	\
 	gtksearchentryprivate.h \
 	gtkselectionprivate.h	\
-	gtksidebarrowprivate.h	\
 	gtksettingsprivate.h	\
+	gtkshortcutlabelprivate.h	\
+	gtksidebarrowprivate.h	\
 	gtksizegroup-private.h	\
 	gtksizerequestcacheprivate.h	\
 	gtksocketprivate.h	\
@@ -530,6 +543,7 @@ gtk_private_h_sources =		\
 	gtktoolbarprivate.h	\
 	gtktoolpaletteprivate.h	\
 	gtktooltipprivate.h	\
+	gtktooltipwindowprivate.h \
 	gtktreedatalist.h	\
 	gtktreeprivate.h	\
 	gtkwidgetprivate.h	\
@@ -673,6 +687,7 @@ gtk_base_c_sources = 		\
 	gtkcssvalue.c		\
 	gtkcsswidgetnode.c	\
 	gtkdialog.c		\
+	gtkdragsource.c		\
 	gtkdrawingarea.c	\
 	gtkeditable.c		\
 	gtkentry.c		\
@@ -686,6 +701,7 @@ gtk_base_c_sources = 		\
 	gtkfilechooserdialog.c	\
 	gtkfilechooserembed.c	\
 	gtkfilechooserentry.c	\
+	gtkfilechoosernative.c	\
 	gtkfilechooserutils.c	\
 	gtkfilechooserwidget.c	\
 	gtkfilefilter.c		\
@@ -753,6 +769,7 @@ gtk_base_c_sources = 		\
 	gtkmodifierstyle.c	\
 	gtkmodules.c		\
 	gtkmountoperation.c	\
+	gtknativedialog.c	\
 	gtknotebook.c		\
 	gtkoffscreenwindow.c	\
 	gtkorientable.c		\
@@ -806,6 +823,12 @@ gtk_base_c_sources = 		\
 	gtkseparatormenuitem.c	\
 	gtkseparatortoolitem.c	\
 	gtksettings.c		\
+	gtkshortcutsgesture.c	\
+	gtkshortcutsgroup.c	\
+	gtkshortcutlabel.c	\
+	gtkshortcutsshortcut.c	\
+	gtkshortcutssection.c	\
+	gtkshortcutswindow.c	\
 	gtksidebarrow.c		\
 	gtksizegroup.c		\
 	gtksizerequest.c	\
@@ -851,6 +874,7 @@ gtk_base_c_sources = 		\
 	gtktoolpalette.c	\
 	gtktoolshell.c		\
 	gtktooltip.c		\
+	gtktooltipwindow.c	\
 	gtktrashmonitor.c	\
 	gtktreedatalist.c	\
 	gtktreednd.c		\
@@ -923,6 +947,7 @@ endif
 gtk_os_win32_c_sources = \
 	gtkprint-win32.c		\
 	gtkprintoperation-win32.c	\
+	gtkfilechoosernativewin32.c	\
 	gtkwin32.c
 if OS_WIN32
 gtk_private_h_sources += gtkprint-win32.h
@@ -1103,6 +1128,7 @@ templates =				\
 	ui/gtksearchbar.ui		\
 	ui/gtkscalebutton.ui		\
 	ui/gtkstatusbar.ui		\
+	ui/gtktooltipwindow.ui		\
 	ui/gtkvolumebutton.ui		\
 	ui/gtksidebarrow.ui
 
@@ -1177,6 +1203,10 @@ gtk.gresource.xml: Makefile.am inspector/Makefile.inc
 	  n=`basename $$f`; \
 	  echo "    <file>cursor/$$n</file>" >> $@; \
 	done; \
+	for f in $(srcdir)/gesture/*.symbolic.png; do \
+	  n=`basename $$f`; \
+	  echo "    <file alias='icons/64x64/actions/$$n'>gesture/$$n</file>" >> $@; \
+	done; \
 	for f in $(srcdir)/ui/*.ui; do \
 	  n=`basename $$f`; \
 	  echo "    <file compressed='true'>ui/$$n</file>" >> $@; \
@@ -1197,6 +1227,14 @@ gtk.gresource.xml: Makefile.am inspector/Makefile.inc
 	echo "    <file>inspector/logo.png</file>" >> $@; \
 	echo "  </gresource>" >> $@; \
 	echo "</gresources>" >> $@;
+
+gesture_sources = 				\
+	gesture/gesture-pinch-symbolic.svg			\
+	gesture/gesture-stretch-symbolic.svg			\
+	gesture/gesture-rotate-clockwise-symbolic.svg		\
+	gesture/gesture-rotate-anticlockwise-symbolic.svg	\
+	gesture/gesture-two-finger-swipe-left-symbolic.svg	\
+	gesture/gesture-two-finger-swipe-right-symbolic.svg
 
 theme_sources = 				\
 	theme/win32/gtk-win32.css 		\
@@ -1498,6 +1536,7 @@ gsettings_SCHEMAS = \
 
 EXTRA_DIST +=                   \
 	$(resource_files)	\
+	$(gesture_sources)	\
 	$(theme_sources)	\
 	$(gsettings_SCHEMAS)	\
 	a11y/Makefile.inc	\

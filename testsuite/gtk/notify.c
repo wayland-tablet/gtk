@@ -407,6 +407,7 @@ test_type (gconstpointer data)
   if (g_type_is_a (type, GTK_TYPE_FILE_CHOOSER_BUTTON) ||
       g_type_is_a (type, GTK_TYPE_FILE_CHOOSER_DIALOG) ||
       g_type_is_a (type, GTK_TYPE_FILE_CHOOSER_WIDGET) ||
+      g_type_is_a (type, GTK_TYPE_FILE_CHOOSER_NATIVE) ||
       g_type_is_a (type, GTK_TYPE_PLACES_SIDEBAR))
     return;
 
@@ -660,6 +661,10 @@ test_type (gconstpointer data)
       if (type == GTK_TYPE_MODEL_BUTTON &&
           pspec->owner_type == GTK_TYPE_BUTTON)
         continue;
+
+      if (g_type_is_a (type, GTK_TYPE_SHORTCUTS_SHORTCUT) &&
+	  g_str_equal (pspec->name, "accelerator"))
+	continue;
 
       if (g_test_verbose ())
         g_print ("Property %s.%s\n", g_type_name (pspec->owner_type), pspec->name);

@@ -44,6 +44,15 @@
  * can use gtk_stack_sidebar_set_stack() to connect the #GtkStackSidebar
  * to the #GtkStack.
  *
+ * # CSS nodes
+ *
+ * GtkStackSidebar has a single CSS node with name stacksidebar and
+ * style class .sidebar.
+ *
+ * When circumstances require it, GtkStackSwitcher adds the
+ * .needs-attention style class to the widgets representing the stack
+ * pages.
+ *
  * Since: 3.16
  */
  
@@ -269,7 +278,6 @@ add_child (GtkWidget       *widget,
            GtkStackSidebar *sidebar)
 {
   GtkStackSidebarPrivate *priv = gtk_stack_sidebar_get_instance_private (sidebar);
-  GtkStyleContext *style;
   GtkWidget *item;
   GtkWidget *row;
 
@@ -286,10 +294,6 @@ add_child (GtkWidget       *widget,
   gtk_widget_show (item);
 
   update_row (sidebar, widget, row);
-
-  /* Fix up styling */
-  style = gtk_widget_get_style_context (row);
-  gtk_style_context_add_class (style, "sidebar-item");
 
   /* Hook up for events */
   g_signal_connect (widget, "child-notify::title",
@@ -434,6 +438,7 @@ static void
 gtk_stack_sidebar_class_init (GtkStackSidebarClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
   object_class->dispose = gtk_stack_sidebar_dispose;
   object_class->finalize = gtk_stack_sidebar_finalize;
@@ -447,6 +452,8 @@ gtk_stack_sidebar_class_init (GtkStackSidebarClass *klass)
                            G_PARAM_READWRITE|G_PARAM_STATIC_STRINGS|G_PARAM_EXPLICIT_NOTIFY);
 
   g_object_class_install_properties (object_class, N_PROPERTIES, obj_properties);
+
+  gtk_widget_class_set_css_name (widget_class, "stacksidebar");
 }
 
 /**

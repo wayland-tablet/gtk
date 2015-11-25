@@ -42,6 +42,15 @@
  * with the same stack widget.
  *
  * The GtkStackSwitcher widget was added in 3.10.
+ *
+ * # CSS nodes
+ *
+ * GtkStackSwitcher has a single CSS node named stackswitcher and
+ * style class .stack-switcher.
+ *
+ * When circumstances require it, GtkStackSwitcher adds the
+ * .needs-attention style class to the widgets representing the
+ * stack pages.
  */
 
 typedef struct _GtkStackSwitcherPrivate GtkStackSwitcherPrivate;
@@ -49,11 +58,13 @@ struct _GtkStackSwitcherPrivate
 {
   GtkStack *stack;
   GHashTable *buttons;
+  gint icon_size;
   gboolean in_child_changed;
 };
 
 enum {
   PROP_0,
+  PROP_ICON_SIZE,
   PROP_STACK
 };
 
@@ -67,6 +78,7 @@ gtk_stack_switcher_init (GtkStackSwitcher *switcher)
 
   priv = gtk_stack_switcher_get_instance_private (switcher);
 
+  priv->icon_size = GTK_ICON_SIZE_MENU;
   priv->stack = NULL;
   priv->buttons = g_hash_table_new (g_direct_hash, g_direct_equal);
 
@@ -96,7 +108,8 @@ on_button_clicked (GtkWidget        *widget,
 static void
 rebuild_child (GtkWidget   *self,
                const gchar *icon_name,
-               const gchar *title)
+               const gchar *title,
+               gint         icon_size)
 {
   GtkStyleContext *context;
   GtkWidget *button_child;
@@ -110,7 +123,7 @@ rebuild_child (GtkWidget   *self,
 
   if (icon_name != NULL)
     {
-      button_child = gtk_image_new_from_icon_name (icon_name, GTK_ICON_SIZE_MENU);
+      button_child = gtk_image_new_from_icon_name (icon_name, icon_size);
       if (title != NULL)
         gtk_widget_set_tooltip_text (GTK_WIDGET (self), title);
 
@@ -170,7 +183,7 @@ update_button (GtkStackSwitcher *self,
                            "icon-name", &icon_name,
                            NULL);
 
-  rebuild_child (button, icon_name, title);
+  rebuild_child (button, icon_name, title, priv->icon_size);
 
   gtk_widget_set_visible (button, gtk_widget_get_visible (widget) && (title != NULL || icon_name != NULL));
 
@@ -244,7 +257,7 @@ add_child (GtkWidget        *widget,
   priv = gtk_stack_switcher_get_instance_private (self);
 
   button = gtk_radio_button_new (NULL);
-  gtk_button_set_focus_on_click (GTK_BUTTON (button), FALSE);
+  gtk_widget_set_focus_on_click (button, FALSE);
   gtk_toggle_button_set_mode (GTK_TOGGLE_BUTTON (button), FALSE);
 
   update_button (self, widget, button);
@@ -444,6 +457,30 @@ gtk_stack_switcher_get_stack (GtkStackSwitcher *switcher)
 }
 
 static void
+gtk_stack_switcher_set_icon_size (GtkStackSwitcher *switcher,
+                                  gint              icon_size)
+{
+  GtkStackSwitcherPrivate *priv;
+
+  g_return_if_fail (GTK_IS_STACK_SWITCHER (switcher));
+
+  priv = gtk_stack_switcher_get_instance_private (switcher);
+
+  if (icon_size != priv->icon_size)
+    {
+      priv->icon_size = icon_size;
+
+      if (priv->stack != NULL)
+        {
+          clear_switcher (switcher);
+          populate_switcher (switcher);
+        }
+
+      g_object_notify (G_OBJECT (switcher), "icon-size");
+    }
+}
+
+static void
 gtk_stack_switcher_get_property (GObject      *object,
                                  guint         prop_id,
                                  GValue       *value,
@@ -455,6 +492,10 @@ gtk_stack_switcher_get_property (GObject      *object,
   priv = gtk_stack_switcher_get_instance_private (switcher);
   switch (prop_id)
     {
+    case PROP_ICON_SIZE:
+      g_value_set_int (value, priv->icon_size);
+      break;
+
     case PROP_STACK:
       g_value_set_object (value, priv->stack);
       break;
@@ -475,6 +516,10 @@ gtk_stack_switcher_set_property (GObject      *object,
 
   switch (prop_id)
     {
+    case PROP_ICON_SIZE:
+      gtk_stack_switcher_set_icon_size (switcher, g_value_get_int (value));
+      break;
+
     case PROP_STACK:
       gtk_stack_switcher_set_stack (switcher, g_value_get_object (value));
       break;
@@ -512,11 +557,29 @@ static void
 gtk_stack_switcher_class_init (GtkStackSwitcherClass *class)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (class);
+  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (class);
 
   object_class->get_property = gtk_stack_switcher_get_property;
   object_class->set_property = gtk_stack_switcher_set_property;
   object_class->dispose = gtk_stack_switcher_dispose;
   object_class->finalize = gtk_stack_switcher_finalize;
+
+  /**
+   * GtkStackSwitcher:icon-size:
+   *
+   * Use the "icon-size" property to change the size of the image displayed
+   * when a #GtkStackSwitcher is displaying icons.
+   *
+   * Since: 3.20
+   */
+  g_object_class_install_property (object_class,
+                                   PROP_ICON_SIZE,
+                                   g_param_spec_int ("icon-size",
+                                                     P_("Icon Size"),
+                                                     P_("Symbolic size to use for named icon"),
+                                                     0, G_MAXINT,
+                                                     GTK_ICON_SIZE_MENU,
+                                                     G_PARAM_EXPLICIT_NOTIFY | GTK_PARAM_READWRITE));
 
   g_object_class_install_property (object_class,
                                    PROP_STACK,
@@ -526,6 +589,8 @@ gtk_stack_switcher_class_init (GtkStackSwitcherClass *class)
                                                         GTK_TYPE_STACK,
                                                         GTK_PARAM_READWRITE |
                                                         G_PARAM_CONSTRUCT));
+
+  gtk_widget_class_set_css_name (widget_class, "stackswitcher");
 }
 
 /**

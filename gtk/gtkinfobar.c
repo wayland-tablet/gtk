@@ -119,6 +119,12 @@
  * multiple <action-widget> elements. The “response” attribute specifies a
  * numeric response, and the content of the element is the id of widget
  * (which should be a child of the dialogs @action_area).
+ *
+ * # CSS nodes
+ *
+ * GtkInfoBar has a single CSS node with name infobar. The node may get
+ * one of the style classes .info, warning, .error or .question, depending
+ * on the message type.
  */
 
 enum
@@ -316,7 +322,7 @@ get_padding_and_border (GtkWidget *widget,
   GtkBorder tmp;
 
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
 
   gtk_style_context_get_padding (context, state, border);
   gtk_style_context_get_border (context, state, &tmp);
@@ -520,7 +526,7 @@ gtk_info_bar_class_init (GtkInfoBarClass *klass)
                                                              0,
                                                              G_MAXINT,
                                                              CONTENT_AREA_DEFAULT_BORDER,
-                                                             GTK_PARAM_READABLE));
+                                                             GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
   /**
    * GtkInfoBar:content-area-spacing:
@@ -538,7 +544,7 @@ gtk_info_bar_class_init (GtkInfoBarClass *klass)
                                                              0,
                                                              G_MAXINT,
                                                              CONTENT_AREA_DEFAULT_SPACING,
-                                                             GTK_PARAM_READABLE));
+                                                             GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
   /**
    * GtkInfoBar:button-spacing:
@@ -555,7 +561,7 @@ gtk_info_bar_class_init (GtkInfoBarClass *klass)
                                                              0,
                                                              G_MAXINT,
                                                              ACTION_AREA_DEFAULT_SPACING,
-                                                             GTK_PARAM_READABLE));
+                                                             GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
   /**
    * GtkInfoBar:action-area-border:
@@ -572,7 +578,7 @@ gtk_info_bar_class_init (GtkInfoBarClass *klass)
                                                              0,
                                                              G_MAXINT,
                                                              ACTION_AREA_DEFAULT_BORDER,
-                                                             GTK_PARAM_READABLE));
+                                                             GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
   binding_set = gtk_binding_set_by_class (klass);
 
@@ -585,6 +591,8 @@ gtk_info_bar_class_init (GtkInfoBarClass *klass)
   gtk_widget_class_bind_template_child_internal_private (widget_class, GtkInfoBar, action_area);
   gtk_widget_class_bind_template_child_internal_private (widget_class, GtkInfoBar, close_button);
   gtk_widget_class_bind_template_child_internal_private (widget_class, GtkInfoBar, revealer);
+
+  gtk_widget_class_set_css_name (widget_class, "infobar");
 }
 
 static void

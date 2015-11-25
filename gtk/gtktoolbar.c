@@ -81,6 +81,10 @@
  *
  * Creating a context menu for the toolbar can be done by connecting to
  * the #GtkToolbar::popup-context-menu signal.
+ *
+ * # CSS nodes
+ *
+ * GtkToolbar has a single CSS node with name toolbar.
  */
 
 
@@ -589,7 +593,7 @@ gtk_toolbar_class_init (GtkToolbarClass *klass)
 							     0,
 							     G_MAXINT,
                                                              0,
-                                                             GTK_PARAM_READABLE));
+                                                             GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
   gtk_widget_class_install_style_property (widget_class,
                                            g_param_spec_int ("max-child-expand",
@@ -630,7 +634,7 @@ gtk_toolbar_class_init (GtkToolbarClass *klass)
                                                               P_("Style of bevel around the toolbar"),
                                                               GTK_TYPE_SHADOW_TYPE,
                                                               GTK_SHADOW_OUT,
-                                                              GTK_PARAM_READABLE));
+                                                              GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
   binding_set = gtk_binding_set_by_class (klass);
   
@@ -654,6 +658,8 @@ gtk_toolbar_class_init (GtkToolbarClass *klass)
   
   add_ctrl_tab_bindings (binding_set, 0, GTK_DIR_TAB_FORWARD);
   add_ctrl_tab_bindings (binding_set, GDK_SHIFT_MASK, GTK_DIR_TAB_BACKWARD);
+
+  gtk_widget_class_set_css_name (widget_class, "toolbar");
 }
 
 static void
@@ -670,13 +676,9 @@ static void
 gtk_toolbar_init (GtkToolbar *toolbar)
 {
   GtkToolbarPrivate *priv;
-  GtkStyleContext *context;
 
   toolbar->priv = gtk_toolbar_get_instance_private (toolbar);
   priv = toolbar->priv;
-
-  context = gtk_widget_get_style_context (GTK_WIDGET (toolbar));
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_TOOLBAR);
 
   gtk_widget_set_can_focus (GTK_WIDGET (toolbar), FALSE);
   gtk_widget_set_has_window (GTK_WIDGET (toolbar), FALSE);
@@ -696,7 +698,7 @@ gtk_toolbar_init (GtkToolbar *toolbar)
   gtk_button_set_relief (GTK_BUTTON (priv->arrow_button),
 			 get_button_relief (toolbar));
 
-  gtk_button_set_focus_on_click (GTK_BUTTON (priv->arrow_button), FALSE);
+  gtk_widget_set_focus_on_click (priv->arrow_button, FALSE);
 
   priv->arrow = gtk_image_new_from_icon_name ("pan-down-symbolic", GTK_ICON_SIZE_BUTTON);
   gtk_widget_set_name (priv->arrow, "gtk-toolbar-arrow");
@@ -3573,7 +3575,6 @@ _gtk_toolbar_paint_space_line (GtkWidget           *widget,
 {
   GtkOrientation orientation;
   GtkStyleContext *context;
-  GtkStateFlags state;
   GtkBorder padding;
   gint width, height;
   const gdouble start_fraction = (SPACE_LINE_START / SPACE_LINE_DIVISION);
@@ -3583,11 +3584,11 @@ _gtk_toolbar_paint_space_line (GtkWidget           *widget,
 
   orientation = toolbar ? toolbar->priv->orientation : GTK_ORIENTATION_HORIZONTAL;
 
-  context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
   width = gtk_widget_get_allocated_width (widget);
   height = gtk_widget_get_allocated_height (widget);
-  gtk_style_context_get_padding (context, state, &padding);
+
+  context = gtk_widget_get_style_context (widget);
+  gtk_style_context_get_padding (context, gtk_style_context_get_state (context), &padding);
 
   if (orientation == GTK_ORIENTATION_HORIZONTAL)
     {

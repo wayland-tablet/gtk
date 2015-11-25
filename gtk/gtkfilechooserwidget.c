@@ -30,8 +30,8 @@
 #include "gtkcheckmenuitem.h"
 #include "gtkclipboard.h"
 #include "gtkcomboboxtext.h"
+#include "gtkdragsource.h"
 #include "gtkentry.h"
-#include "gtkstack.h"
 #include "gtkexpander.h"
 #include "gtkfilechooserprivate.h"
 #include "gtkfilechooserdialog.h"
@@ -59,6 +59,7 @@
 #include "gtksettings.h"
 #include "gtksizegroup.h"
 #include "gtksizerequest.h"
+#include "gtkstack.h"
 #include "gtktooltip.h"
 #include "gtktreednd.h"
 #include "gtktreeprivate.h"
@@ -2403,6 +2404,7 @@ list_button_press_event_cb (GtkWidget            *widget,
   get_selection_modifiers (widget, event, &modify, &extend);
   if (!is_touchscreen &&
       !modify && !extend &&
+      event->type == GDK_BUTTON_PRESS &&
       event->button == GDK_BUTTON_PRIMARY &&
       gtk_tree_view_get_path_at_pos (GTK_TREE_VIEW (priv->browse_files_tree_view),
                                      event->x, event->y,
@@ -6126,13 +6128,11 @@ find_good_size_from_style (GtkWidget *widget,
                            gint      *height)
 {
   GtkStyleContext *context;
-  GtkStateFlags state;
   double font_size;
   GdkScreen *screen;
   double resolution;
 
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
 
   screen = gtk_widget_get_screen (widget);
   if (screen)
@@ -6144,7 +6144,10 @@ find_good_size_from_style (GtkWidget *widget,
   else
     resolution = 96.0; /* wheeee */
 
-  gtk_style_context_get (context, state, "font-size", &font_size, NULL);
+  gtk_style_context_get (context,
+                         gtk_style_context_get_state (context),
+                         "font-size", &font_size,
+                         NULL);
   font_size = font_size * resolution / 72.0 + 0.5;
 
   *width = font_size * NUM_CHARS;

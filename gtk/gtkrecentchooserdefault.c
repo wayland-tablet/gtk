@@ -38,6 +38,7 @@
 #include "gtkcheckmenuitem.h"
 #include "gtkclipboard.h"
 #include "gtkcomboboxtext.h"
+#include "gtkdragsource.h"
 #include "gtkentry.h"
 #include "gtkeventbox.h"
 #include "gtkexpander.h"
@@ -875,14 +876,12 @@ set_default_size (GtkRecentChooserDefault *impl)
   GtkRequisition req;
   GdkRectangle monitor;
   GtkStyleContext *context;
-  GtkStateFlags state;
 
   widget = GTK_WIDGET (impl);
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
 
   /* Size based on characters and the icon size */
-  gtk_style_context_get (context, state, "font-size", &font_size, NULL);
+  gtk_style_context_get (context, gtk_style_context_get_state (context), "font-size", &font_size, NULL);
 
   width = impl->priv->icon_size + font_size * NUM_CHARS + 0.5;
   height = (impl->priv->icon_size + font_size) * NUM_LINES + 0.5;

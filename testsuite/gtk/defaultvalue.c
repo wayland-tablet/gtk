@@ -411,6 +411,7 @@ main (int argc, char **argv)
   guint i;
   gchar *schema_dir;
   GTestDBus *bus;
+  GMainLoop *loop;
   gint result;
 
   /* These must be set before before gtk_test_init */
@@ -436,6 +437,9 @@ main (int argc, char **argv)
     {
       gchar *testname;
 
+      if (otypes[i] == GTK_TYPE_FILE_CHOOSER_NATIVE)
+        continue;
+
       testname = g_strdup_printf ("/Default Values/%s",
 				  g_type_name (otypes[i]));
       g_test_add_data_func (testname,
@@ -445,6 +449,14 @@ main (int argc, char **argv)
     }
 
   result = g_test_run();
+
+  /* Work around the annoying issue that g_test_dbus_down is giving
+   * us an "Error while sending AddMatch" that comes out of an idle
+   */
+  loop = g_main_loop_new (NULL, FALSE);
+  g_timeout_add (1000, (GSourceFunc)g_main_loop_quit, loop);
+  g_main_loop_run (loop);
+  g_main_loop_unref (loop);
 
   g_test_dbus_down (bus);
   g_object_unref (bus);

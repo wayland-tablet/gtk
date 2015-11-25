@@ -3,16 +3,16 @@
  * Copyright (C) 2015 Georges Basile Stavracas Neto <georges.stavracas@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 2.1 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * GNU Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
+ * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
@@ -71,6 +71,8 @@ struct _GtkPlacesViewPrivate
   GtkWidget                     *stack;
   GtkWidget                     *network_placeholder;
   GtkWidget                     *network_placeholder_label;
+
+  GtkSizeGroup                  *path_size_group;
 
   GtkEntryCompletion            *address_entry_completion;
   GtkListStore                  *completion_store;
@@ -406,6 +408,7 @@ gtk_places_view_finalize (GObject *object)
   g_clear_object (&priv->volume_monitor);
   g_clear_object (&priv->cancellable);
   g_clear_object (&priv->networks_fetching_cancellable);
+  g_clear_object (&priv->path_size_group);
 
   G_OBJECT_CLASS (gtk_places_view_parent_class)->finalize (object);
 }
@@ -673,6 +676,8 @@ insert_row (GtkPlacesView *view,
                     "clicked",
                     G_CALLBACK (on_eject_button_clicked),
                     row);
+
+  gtk_places_view_row_set_path_size_group (GTK_PLACES_VIEW_ROW (row), priv->path_size_group);
 
   gtk_container_add (GTK_CONTAINER (priv->listbox), row);
 }
@@ -2243,6 +2248,8 @@ gtk_places_view_class_init (GtkPlacesViewClass *klass)
   gtk_widget_class_bind_template_callback (widget_class, on_key_press_event);
   gtk_widget_class_bind_template_callback (widget_class, on_listbox_row_activated);
   gtk_widget_class_bind_template_callback (widget_class, on_recent_servers_listbox_row_activated);
+
+  gtk_widget_class_set_css_name (widget_class, "placesview");
 }
 
 static void
@@ -2254,6 +2261,7 @@ gtk_places_view_init (GtkPlacesView *self)
 
   priv->volume_monitor = g_volume_monitor_get ();
   priv->open_flags = GTK_PLACES_OPEN_NORMAL;
+  priv->path_size_group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
 
   gtk_widget_init_template (GTK_WIDGET (self));
 }
@@ -2366,8 +2374,6 @@ gtk_places_view_get_search_query (GtkPlacesView *view)
  *
  * Sets the search query of @view. The search is immediately performed
  * once the query is set.
- *
- * Returns:
  */
 void
 gtk_places_view_set_search_query (GtkPlacesView *view,
@@ -2502,8 +2508,6 @@ gtk_places_view_get_local_only (GtkPlacesView *view)
  * @local_only: %TRUE to hide remote locations, %FALSE to show.
  *
  * Sets the #GtkPlacesView::local-only property to @local_only.
- *
- * Returns:
  *
  * Since: 3.18
  */

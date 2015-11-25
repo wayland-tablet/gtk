@@ -84,6 +84,7 @@
 #include <gtk/gtkdebug.h>
 #include <gtk/gtkdialog.h>
 #include <gtk/gtkdnd.h>
+#include <gtk/gtkdragsource.h>
 #include <gtk/gtkdrawingarea.h>
 #include <gtk/gtkeditable.h>
 #include <gtk/gtkentry.h>
@@ -97,6 +98,7 @@
 #include <gtk/gtkfilechooser.h>
 #include <gtk/gtkfilechooserbutton.h>
 #include <gtk/gtkfilechooserdialog.h>
+#include <gtk/gtkfilechoosernative.h>
 #include <gtk/gtkfilechooserwidget.h>
 #include <gtk/gtkfilefilter.h>
 #include <gtk/gtkflowbox.h>
@@ -144,6 +146,7 @@
 #include <gtk/gtkmodelbutton.h>
 #include <gtk/gtkmodules.h>
 #include <gtk/gtkmountoperation.h>
+#include <gtk/gtknativedialog.h>
 #include <gtk/gtknotebook.h>
 #include <gtk/gtkoffscreenwindow.h>
 #include <gtk/gtkorientable.h>
@@ -183,6 +186,11 @@
 #include <gtk/gtkseparatormenuitem.h>
 #include <gtk/gtkseparatortoolitem.h>
 #include <gtk/gtksettings.h>
+#include <gtk/gtkshortcutsgesture.h>
+#include <gtk/gtkshortcutsgroup.h>
+#include <gtk/gtkshortcutssection.h>
+#include <gtk/gtkshortcutsshortcut.h>
+#include <gtk/gtkshortcutswindow.h>
 #include <gtk/gtkshow.h>
 #include <gtk/gtkstacksidebar.h>
 #include <gtk/gtksizegroup.h>

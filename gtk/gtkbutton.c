@@ -34,6 +34,20 @@
  * The #GtkButton widget can hold any valid child widget.  That is, it can hold
  * almost any other standard #GtkWidget.  The most commonly used child is the
  * #GtkLabel.
+ *
+ * # CSS nodes
+ *
+ * GtkButton has a single CSS node with name button. The node will get the
+ * style classes .image-button or .text-button, if the content is just an
+ * image or label, respectively. It may also receive the .flat style class.
+ *
+ * Other style classes that are commonly used with GtkButton include
+ * .suggested-action and .destructive-action.
+ *
+ * Button-like widgets like #GtkToggleButton, #GtkMenuButton, #GtkVolumeButton,
+ * #GtkLockButton, #GtkColorButton, #GtkFontButton or #GtkFileChooserButton use
+ * style classes such as .toggle, .popup, .scale, .lock, .color, .font, .file
+ * to differentiate themselves from a plain GtkButton.
  */
 
 #include "config.h"
@@ -85,7 +99,6 @@ enum {
   PROP_RELIEF,
   PROP_USE_UNDERLINE,
   PROP_USE_STOCK,
-  PROP_FOCUS_ON_CLICK,
   PROP_XALIGN,
   PROP_YALIGN,
   PROP_IMAGE_POSITION,
@@ -267,13 +280,6 @@ gtk_button_class_init (GtkButtonClass *klass)
                           P_("If set, the label is used to pick a stock item instead of being displayed"),
                           FALSE,
                           GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT|G_PARAM_EXPLICIT_NOTIFY|G_PARAM_DEPRECATED);
-  
-  props[PROP_FOCUS_ON_CLICK] =
-    g_param_spec_boolean ("focus-on-click",
-                          P_("Focus on click"),
-                          P_("Whether the button grabs focus when it is clicked with the mouse"),
-                          TRUE,
-                          GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY);
   
   props[PROP_RELIEF] =
     g_param_spec_enum ("relief",
@@ -513,6 +519,15 @@ gtk_button_class_init (GtkButtonClass *klass)
 							       P_("Extra space to add for GTK_CAN_DEFAULT buttons that is always drawn outside the border"),
 							       GTK_TYPE_BORDER,
 							       GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
+
+  /**
+   * GtkButton:child-displacement-x:
+   *
+   * How far in the x direction to move the child when the button is depressed.
+   *
+   * Deprecated: 3.20: Use CSS margins and padding instead;
+   *     the value of this style property is ignored.
+   */
   gtk_widget_class_install_style_property (widget_class,
 					   g_param_spec_int ("child-displacement-x",
 							     P_("Child X Displacement"),
@@ -521,6 +536,15 @@ gtk_button_class_init (GtkButtonClass *klass)
 							     G_MAXINT,
 							     0,
 							     GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
+
+  /**
+   * GtkButton:child-displacement-y:
+   *
+   * How far in the y direction to move the child when the button is depressed.
+   *
+   * Deprecated: 3.20: Use CSS margins and padding instead;
+   *     the value of this style property is ignored.
+   */
   gtk_widget_class_install_style_property (widget_class,
 					   g_param_spec_int ("child-displacement-y",
 							     P_("Child Y Displacement"),
@@ -533,10 +557,13 @@ gtk_button_class_init (GtkButtonClass *klass)
   /**
    * GtkButton:displace-focus:
    *
-   * Whether the child_displacement_x/child_displacement_y properties 
+   * Whether the child_displacement_x/child_displacement_y properties
    * should also affect the focus rectangle.
    *
    * Since: 2.6
+   *
+   * Deprecated: 3.20: Use CSS margins and padding instead;
+   *     the value of this style property is ignored.
    */
   gtk_widget_class_install_style_property (widget_class,
 					   g_param_spec_boolean ("displace-focus",
@@ -568,6 +595,8 @@ gtk_button_class_init (GtkButtonClass *klass)
    * Spacing in pixels between the image and label.
    *
    * Since: 2.10
+   *
+   * Deprecated: 3.20: Use CSS margins and padding instead.
    */
   gtk_widget_class_install_style_property (widget_class,
 					   g_param_spec_int ("image-spacing",
@@ -576,9 +605,10 @@ gtk_button_class_init (GtkButtonClass *klass)
 							     0,
 							     G_MAXINT,
 							     2,
-							     GTK_PARAM_READABLE));
+							     GTK_PARAM_READABLE | G_PARAM_DEPRECATED));
 
   gtk_widget_class_set_accessible_type (widget_class, GTK_TYPE_BUTTON_ACCESSIBLE);
+  gtk_widget_class_set_css_name (widget_class, "button");
 }
 
 static void
@@ -591,7 +621,7 @@ multipress_pressed_cb (GtkGestureMultiPress *gesture,
   GtkButton *button = GTK_BUTTON (widget);
   GtkButtonPrivate *priv = button->priv;
 
-  if (priv->focus_on_click && !gtk_widget_has_focus (widget))
+  if (gtk_widget_get_focus_on_click (widget) && !gtk_widget_has_focus (widget))
     gtk_widget_grab_focus (widget);
 
   priv->in_button = TRUE;
@@ -658,7 +688,6 @@ static void
 gtk_button_init (GtkButton *button)
 {
   GtkButtonPrivate *priv;
-  GtkStyleContext *context;
 
   button->priv = gtk_button_get_instance_private (button);
   priv = button->priv;
@@ -674,7 +703,6 @@ gtk_button_init (GtkButton *button)
   priv->button_down = FALSE;
   priv->use_stock = FALSE;
   priv->use_underline = FALSE;
-  priv->focus_on_click = TRUE;
 
   priv->xalign = 0.5;
   priv->yalign = 0.5;
@@ -682,9 +710,6 @@ gtk_button_init (GtkButton *button)
   priv->image_is_stock = TRUE;
   priv->image_position = GTK_POS_LEFT;
   priv->use_action_appearance = TRUE;
-
-  context = gtk_widget_get_style_context (GTK_WIDGET (button));
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_BUTTON);
 
   priv->gesture = gtk_gesture_multi_press_new (GTK_WIDGET (button));
   gtk_gesture_single_set_touch_only (GTK_GESTURE_SINGLE (priv->gesture), FALSE);
@@ -841,9 +866,6 @@ gtk_button_set_property (GObject         *object,
       gtk_button_set_use_stock (button, g_value_get_boolean (value));
       G_GNUC_END_IGNORE_DEPRECATIONS;
       break;
-    case PROP_FOCUS_ON_CLICK:
-      gtk_button_set_focus_on_click (button, g_value_get_boolean (value));
-      break;
     case PROP_XALIGN:
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
       gtk_button_set_alignment (button, g_value_get_float (value), priv->yalign);
@@ -903,9 +925,6 @@ gtk_button_get_property (GObject         *object,
       break;
     case PROP_USE_STOCK:
       g_value_set_boolean (value, priv->use_stock);
-      break;
-    case PROP_FOCUS_ON_CLICK:
-      g_value_set_boolean (value, priv->focus_on_click);
       break;
     case PROP_XALIGN:
       g_value_set_float (value, priv->xalign);
@@ -2379,20 +2398,9 @@ void
 gtk_button_set_focus_on_click (GtkButton *button,
 			       gboolean   focus_on_click)
 {
-  GtkButtonPrivate *priv;
-
   g_return_if_fail (GTK_IS_BUTTON (button));
 
-  priv = button->priv;
-
-  focus_on_click = focus_on_click != FALSE;
-
-  if (priv->focus_on_click != focus_on_click)
-    {
-      priv->focus_on_click = focus_on_click;
-      
-      g_object_notify_by_pspec (G_OBJECT (button), props[PROP_FOCUS_ON_CLICK]);
-    }
+  gtk_widget_set_focus_on_click (GTK_WIDGET (button), focus_on_click);
 }
 
 /**
@@ -2412,7 +2420,7 @@ gtk_button_get_focus_on_click (GtkButton *button)
 {
   g_return_val_if_fail (GTK_IS_BUTTON (button), FALSE);
   
-  return button->priv->focus_on_click;
+  return gtk_widget_get_focus_on_click (GTK_WIDGET (button));
 }
 
 /**

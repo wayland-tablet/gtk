@@ -54,7 +54,7 @@ send_event (GdkWindow *window, GdkDevice *device, GdkEvent *event)
 
   gdk_event_set_device (event, device);
   gdk_event_set_source_device (event, device);
-  gdk_event_set_screen (event, gdk_display_get_screen (gdk_window_get_display (window), 0));
+  gdk_event_set_screen (event, gdk_display_get_default_screen (gdk_window_get_display (window)));
   event->any.window = g_object_ref (window);
 
   display = gdk_window_get_display (window);
@@ -330,6 +330,8 @@ handle_touch_event (GdkWindow           *window,
       gdk_event->touch.y = mir_touch_event_axis_value (mir_touch_event, i, mir_touch_axis_y);
       gdk_event->touch.x_root = mir_touch_event_axis_value (mir_touch_event, i, mir_touch_axis_x);
       gdk_event->touch.y_root = mir_touch_event_axis_value (mir_touch_event, i, mir_touch_axis_y);
+      gdk_event->touch.emulating_pointer = TRUE;
+      _gdk_event_set_pointer_emulated (gdk_event, TRUE);
 
       send_event (window, get_pointer (window), gdk_event);
     }

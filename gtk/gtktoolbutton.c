@@ -60,6 +60,10 @@
  * that widget is used as the icon. Otherwise, if #GtkToolButton:stock-id is
  * non-%NULL, the icon is determined by the stock item. Otherwise,
  * the button does not have a icon.
+ *
+ * # CSS nodes
+ *
+ * GtkToolButton has a single CSS node with name toolbutton.
  */
 
 
@@ -309,7 +313,7 @@ gtk_tool_button_class_init (GtkToolButtonClass *klass)
 							     0,
 							     G_MAXINT,
 							     3,
-							     GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
+							     GTK_PARAM_READWRITE));
 
 /**
  * GtkToolButton::clicked:
@@ -328,6 +332,8 @@ gtk_tool_button_class_init (GtkToolButtonClass *klass)
 		  G_TYPE_NONE, 0);
   
   g_type_class_add_private (object_class, sizeof (GtkToolButtonPrivate));
+
+  gtk_widget_class_set_css_name (widget_class, "toolbutton");
 }
 
 static void
@@ -346,7 +352,7 @@ gtk_tool_button_init (GtkToolButton      *button,
 
   /* create button */
   button->priv->button = g_object_new (klass->button_type, NULL);
-  gtk_button_set_focus_on_click (GTK_BUTTON (button->priv->button), FALSE);
+  gtk_widget_set_focus_on_click (GTK_WIDGET (button->priv->button), FALSE);
   g_signal_connect_object (button->priv->button, "clicked",
 			   G_CALLBACK (button_clicked), button, 0);
 

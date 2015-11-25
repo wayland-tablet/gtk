@@ -60,6 +60,12 @@
  * as selected when the user tries to select it.
  *
  * The GtkListBox widget was added in GTK+ 3.10.
+ *
+ * # CSS nodes
+ *
+ * GtkListBox uses a single CSS node with name list. GtkListBoxRow uses
+ * a single CSS node with name row. The row nodes get the .activatable
+ * style class added when appropriate.
  */
 
 typedef struct
@@ -176,8 +182,6 @@ static void                 gtk_list_box_add_move_binding             (GtkBindin
 static void                 gtk_list_box_update_cursor                (GtkListBox          *box,
                                                                        GtkListBoxRow       *row,
                                                                        gboolean             grab_focus);
-static void                 gtk_list_box_select_and_activate          (GtkListBox          *box,
-                                                                       GtkListBoxRow       *row);
 static void                 gtk_list_box_update_prelight              (GtkListBox          *box,
                                                                        GtkListBoxRow       *row);
 static void                 gtk_list_box_update_active                (GtkListBox          *box,
@@ -298,7 +302,6 @@ gtk_list_box_init (GtkListBox *box)
 {
   GtkListBoxPrivate *priv = BOX_PRIV (box);
   GtkWidget *widget = GTK_WIDGET (box);
-  GtkStyleContext *context;
 
   gtk_widget_set_has_window (widget, TRUE);
   gtk_widget_set_redraw_on_allocate (widget, TRUE);
@@ -307,9 +310,6 @@ gtk_list_box_init (GtkListBox *box)
 
   priv->children = g_sequence_new (NULL);
   priv->header_hash = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, NULL);
-
-  context = gtk_widget_get_style_context (widget);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_LIST);
 
   priv->multipress_gesture = gtk_gesture_multi_press_new (widget);
   gtk_event_controller_set_propagation_phase (GTK_EVENT_CONTROLLER (priv->multipress_gesture),
@@ -618,6 +618,8 @@ gtk_list_box_class_init (GtkListBoxClass *klass)
                                 "select-all", 0);
   gtk_binding_entry_add_signal (binding_set, GDK_KEY_a, GDK_CONTROL_MASK | GDK_SHIFT_MASK,
                                 "unselect-all", 0);
+
+  gtk_widget_class_set_css_name (widget_class, "list");
 }
 
 /**
@@ -1618,15 +1620,18 @@ gtk_list_box_select_all_between (GtkListBox    *box,
     }
 }
 
+#define gtk_list_box_update_selection(b,r,m,e) \
+  gtk_list_box_update_selection_full((b), (r), (m), (e), TRUE)
 static void
-gtk_list_box_update_selection (GtkListBox    *box,
-                               GtkListBoxRow *row,
-                               gboolean       modify,
-                               gboolean       extend)
+gtk_list_box_update_selection_full (GtkListBox    *box,
+                                    GtkListBoxRow *row,
+                                    gboolean       modify,
+                                    gboolean       extend,
+                                    gboolean       grab_cursor)
 {
   GtkListBoxPrivate *priv = BOX_PRIV (box);
 
-  gtk_list_box_update_cursor (box, row, TRUE);
+  gtk_list_box_update_cursor (box, row, grab_cursor);
 
   if (priv->selection_mode == GTK_SELECTION_NONE)
     return;
@@ -1699,14 +1704,17 @@ gtk_list_box_activate (GtkListBox    *box,
     g_signal_emit (box, signals[ROW_ACTIVATED], 0, row);
 }
 
+#define gtk_list_box_select_and_activate(b,r) \
+  gtk_list_box_select_and_activate_full ((b), (r), TRUE)
 static void
-gtk_list_box_select_and_activate (GtkListBox    *box,
-                                  GtkListBoxRow *row)
+gtk_list_box_select_and_activate_full (GtkListBox    *box,
+                                       GtkListBoxRow *row,
+                                       gboolean       grab_focus)
 {
   if (row != NULL)
     {
       gtk_list_box_select_row_internal (box, row);
-      gtk_list_box_update_cursor (box, row, TRUE);
+      gtk_list_box_update_cursor (box, row, grab_focus);
       gtk_list_box_activate (box, row);
     }
 }
@@ -1898,11 +1906,13 @@ gtk_list_box_multipress_gesture_released (GtkGestureMultiPress *gesture,
 
   if (priv->active_row != NULL && priv->active_row_active)
     {
+      gboolean focus_on_click = gtk_widget_get_focus_on_click (GTK_WIDGET (box));
+
       gtk_widget_unset_state_flags (GTK_WIDGET (priv->active_row),
                                     GTK_STATE_FLAG_ACTIVE);
 
       if (n_press == 1 && priv->activate_single_click)
-        gtk_list_box_select_and_activate (box, priv->active_row);
+        gtk_list_box_select_and_activate_full (box, priv->active_row, focus_on_click);
       else
         {
           GdkEventSequence *sequence;
@@ -1923,7 +1933,7 @@ gtk_list_box_multipress_gesture_released (GtkGestureMultiPress *gesture,
           if (source == GDK_SOURCE_TOUCHSCREEN)
             modify = !modify;
 
-          gtk_list_box_update_selection (box, priv->active_row, modify, extend);
+          gtk_list_box_update_selection_full (box, priv->active_row, modify, extend, focus_on_click);
         }
     }
 
@@ -3016,7 +3026,6 @@ gtk_list_box_row_init (GtkListBoxRow *row)
   ROW_PRIV (row)->selectable = TRUE;
 
   context = gtk_widget_get_style_context (GTK_WIDGET (row));
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_LIST_ROW);
   gtk_style_context_add_class (context, "activatable");
 }
 
@@ -3132,21 +3141,20 @@ gtk_list_box_row_draw (GtkWidget *widget,
                        cairo_t   *cr)
 {
   GtkListBoxRow *row = GTK_LIST_BOX_ROW (widget);
-  GtkAllocation allocation = {0};
-  GtkStyleContext* context;
-  GtkStateFlags state;
-  GtkBorder border;
+  GtkAllocation allocation;
+  GtkStyleContext *context;
 
   gtk_widget_get_allocation (widget, &allocation);
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
 
-  gtk_render_background (context, cr, (gdouble) 0, (gdouble) 0, (gdouble) allocation.width, (gdouble) allocation.height);
-  gtk_render_frame (context, cr, (gdouble) 0, (gdouble) 0, (gdouble) allocation.width, (gdouble) allocation.height);
+  gtk_render_background (context, cr, 0, 0, allocation.width, allocation.height);
+  gtk_render_frame (context, cr, 0, 0, allocation.width, allocation.height);
 
   if (gtk_widget_has_visible_focus (GTK_WIDGET (row)))
     {
-      gtk_style_context_get_border (context, state, &border);
+      GtkBorder border;
+
+      gtk_style_context_get_border (context, gtk_style_context_get_state (context), &border);
       gtk_render_focus (context, cr, border.left, border.top,
                         allocation.width - border.left - border.right,
                         allocation.height - border.top - border.bottom);
@@ -3672,6 +3680,7 @@ gtk_list_box_row_class_init (GtkListBoxRowClass *klass)
 
   g_object_class_install_properties (object_class, LAST_ROW_PROPERTY, row_properties);
 
+  gtk_widget_class_set_css_name (widget_class, "row");
 }
 
 static void

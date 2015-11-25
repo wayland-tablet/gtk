@@ -31,6 +31,10 @@
  * The #GtkMenuBar is a subclass of #GtkMenuShell which contains one or
  * more #GtkMenuItems. The result is a standard menu bar which can hold
  * many menu items.
+ *
+ * # CSS nodes
+ *
+ * GtkMenuBar has a single CSS node with name menubar.
  */
 
 #include "config.h"
@@ -101,8 +105,6 @@ static gint gtk_menu_bar_get_popup_delay   (GtkMenuShell    *menu_shell);
 static void gtk_menu_bar_move_current      (GtkMenuShell     *menu_shell,
                                             GtkMenuDirectionType direction);
 
-static GtkShadowType get_shadow_type   (GtkMenuBar      *menubar);
-
 G_DEFINE_TYPE_WITH_PRIVATE (GtkMenuBar, gtk_menu_bar, GTK_TYPE_MENU_SHELL)
 
 static void
@@ -128,8 +130,6 @@ gtk_menu_bar_class_init (GtkMenuBarClass *class)
   widget_class->size_allocate = gtk_menu_bar_size_allocate;
   widget_class->draw = gtk_menu_bar_draw;
   widget_class->hierarchy_changed = gtk_menu_bar_hierarchy_changed;
-  
-  gtk_widget_class_set_accessible_role (widget_class, ATK_ROLE_MENU_BAR);
 
   menu_shell_class->submenu_placement = GTK_TOP_BOTTOM;
   menu_shell_class->get_popup_delay = gtk_menu_bar_get_popup_delay;
@@ -212,13 +212,21 @@ gtk_menu_bar_class_init (GtkMenuBarClass *class)
                                                       GTK_PARAM_READWRITE|G_PARAM_EXPLICIT_NOTIFY));
   
 
+  /**
+   * GtkMenuBar:shadow-type:
+   *
+   * The style of the shadow around the menubar.
+   *
+   * Deprecated: 3.20: Use CSS to determine the shadow; the value of
+   *     this style property is ignored.
+   */
   gtk_widget_class_install_style_property (widget_class,
 					   g_param_spec_enum ("shadow-type",
                                                               P_("Shadow type"),
                                                               P_("Style of bevel around the menubar"),
                                                               GTK_TYPE_SHADOW_TYPE,
                                                               GTK_SHADOW_OUT,
-                                                              GTK_PARAM_READABLE));
+                                                              GTK_PARAM_READABLE|G_PARAM_DEPRECATED));
 
   /**
    * GtkMenuBar:internal-padding:
@@ -237,18 +245,16 @@ gtk_menu_bar_class_init (GtkMenuBarClass *class)
 							     G_MAXINT,
                                                              0,
                                                              GTK_PARAM_READABLE |
-                                                             G_PARAM_DEPRECATED));
+                                                             G_PARAM_DEPRECATED|G_PARAM_DEPRECATED));
+
+  gtk_widget_class_set_accessible_role (widget_class, ATK_ROLE_MENU_BAR);
+  gtk_widget_class_set_css_name (widget_class, "menubar");
 }
 
 static void
 gtk_menu_bar_init (GtkMenuBar *menu_bar)
 {
-  GtkStyleContext *context;
-
   menu_bar->priv = gtk_menu_bar_get_instance_private (menu_bar);
-
-  context = gtk_widget_get_style_context (GTK_WIDGET (menu_bar));
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_MENUBAR);
 }
 
 /**
@@ -325,7 +331,6 @@ gtk_menu_bar_size_request (GtkWidget      *widget,
   gint child_minimum, child_natural;
   GtkStyleContext *context;
   GtkBorder border;
-  GtkStateFlags flags;
 
   *minimum = 0;
   *natural = 0;
@@ -382,8 +387,7 @@ gtk_menu_bar_size_request (GtkWidget      *widget,
     }
 
   context = gtk_widget_get_style_context (widget);
-  flags = gtk_widget_get_state_flags (widget);
-  gtk_style_context_get_padding (context, flags, &border);
+  gtk_style_context_get_padding (context, gtk_style_context_get_state (context), &border);
 
   if (orientation == GTK_ORIENTATION_HORIZONTAL)
     {
@@ -400,20 +404,17 @@ gtk_menu_bar_size_request (GtkWidget      *widget,
   *minimum += border_width * 2;
   *natural += border_width * 2;
 
-  if (get_shadow_type (menu_bar) != GTK_SHADOW_NONE)
-    {
-      gtk_style_context_get_border (context, flags, &border);
+  gtk_style_context_get_border (context, gtk_style_context_get_state (context), &border);
 
-      if (orientation == GTK_ORIENTATION_HORIZONTAL)
-        {
-          *minimum += border.left + border.right;
-          *natural += border.left + border.right;
-        }
-      else
-        {
-          *minimum += border.top + border.bottom;
-          *natural += border.top + border.bottom;
-        }
+  if (orientation == GTK_ORIENTATION_HORIZONTAL)
+    {
+      *minimum += border.left + border.right;
+      *natural += border.left + border.right;
+    }
+  else
+    {
+      *minimum += border.top + border.bottom;
+      *natural += border.top + border.bottom;
     }
 }
 
@@ -483,12 +484,10 @@ gtk_menu_bar_size_allocate (GtkWidget     *widget,
   if (menu_shell->priv->children)
     {
       GtkStyleContext *context;
-      GtkStateFlags flags;
       GtkBorder border;
 
       context = gtk_widget_get_style_context (widget);
-      flags = gtk_widget_get_state_flags (widget);
-      gtk_style_context_get_padding (context, flags, &border);
+      gtk_style_context_get_padding (context, gtk_style_context_get_state (context), &border);
 
       border_width = gtk_container_get_border_width (GTK_CONTAINER (menu_bar));
 
@@ -499,16 +498,13 @@ gtk_menu_bar_size_allocate (GtkWidget     *widget,
       remaining_space.height = allocation->height -
         2 * border_width - border.top - border.bottom;
 
-      if (get_shadow_type (menu_bar) != GTK_SHADOW_NONE)
-	{
-          gtk_style_context_get_border (context, flags, &border);
+      gtk_style_context_get_border (context, gtk_style_context_get_state (context), &border);
 
-          remaining_space.x += border.left;
-          remaining_space.y += border.top;
-          remaining_space.width -= border.left + border.right;
-          remaining_space.height -= border.top + border.bottom;
-	}
-      
+      remaining_space.x += border.left;
+      remaining_space.y += border.top;
+      remaining_space.width -= border.left + border.right;
+      remaining_space.height -= border.top + border.bottom;
+
       requested_sizes = g_array_new (FALSE, FALSE, sizeof (GtkRequestedSize));
 
       if (priv->pack_direction == GTK_PACK_DIRECTION_LTR ||
@@ -640,11 +636,10 @@ gtk_menu_bar_draw (GtkWidget *widget,
                          gtk_widget_get_allocated_width (widget) - border * 2,
                          gtk_widget_get_allocated_height (widget) - border * 2);
 
-  if (get_shadow_type (GTK_MENU_BAR (widget)) != GTK_SHADOW_NONE)
-    gtk_render_frame (context, cr,
-                      border, border,
-                      gtk_widget_get_allocated_width (widget) - border * 2,
-                      gtk_widget_get_allocated_height (widget) - border * 2);
+  gtk_render_frame (context, cr,
+                    border, border,
+                    gtk_widget_get_allocated_width (widget) - border * 2,
+                    gtk_widget_get_allocated_height (widget) - border * 2);
 
   GTK_WIDGET_CLASS (gtk_menu_bar_parent_class)->draw (widget, cr);
 
@@ -772,18 +767,6 @@ _gtk_menu_bar_cycle_focus (GtkMenuBar       *menubar,
 
   if (to_activate)
     g_signal_emit_by_name (to_activate, "activate_item");
-}
-
-static GtkShadowType
-get_shadow_type (GtkMenuBar *menubar)
-{
-  GtkShadowType shadow_type = GTK_SHADOW_OUT;
-  
-  gtk_widget_style_get (GTK_WIDGET (menubar),
-			"shadow-type", &shadow_type,
-			NULL);
-
-  return shadow_type;
 }
 
 static gint

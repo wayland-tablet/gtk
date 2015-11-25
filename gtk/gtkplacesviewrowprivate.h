@@ -3,16 +3,16 @@
  * Copyright (C) 2015 Georges Basile Stavracas Neto <georges.stavracas@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 2.1 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * GNU Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
+ * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
@@ -24,6 +24,7 @@
 #endif
 
 #include "gtkwidget.h"
+#include "gtksizegroup.h"
 #include "gtklistbox.h"
 
 G_BEGIN_DECLS
@@ -52,6 +53,9 @@ gboolean           gtk_places_view_row_get_is_network            (GtkPlacesViewR
 
 void               gtk_places_view_row_set_is_network            (GtkPlacesViewRow   *row,
                                                                   gboolean            is_network);
+
+void               gtk_places_view_row_set_path_size_group       (GtkPlacesViewRow   *row,
+                                                                  GtkSizeGroup       *group);
 
 G_END_DECLS
 

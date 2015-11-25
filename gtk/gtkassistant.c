@@ -50,6 +50,10 @@
  * To add pages to an assistant in #GtkBuilder, simply add it as a
  * child to the GtkAssistant object, and set its child properties
  * as necessary.
+ *
+ * # CSS nodes
+ *
+ * GtkAssistant has a single CSS node with the name assistant.
  */
 
 #include "config.h"
@@ -525,6 +529,13 @@ gtk_assistant_class_init (GtkAssistantClass *class)
                                                      -1, 1, -1,
                                                      GTK_PARAM_READWRITE|G_PARAM_CONSTRUCT_ONLY));
 
+  /**
+   * GtkAssistant:header-padding:
+   *
+   * Number of pixels around the header.
+   *
+   * Deprecated:3.20: This style property is ignored.
+   */
   gtk_widget_class_install_style_property (widget_class,
                                            g_param_spec_int ("header-padding",
                                                              P_("Header Padding"),
@@ -532,7 +543,15 @@ gtk_assistant_class_init (GtkAssistantClass *class)
                                                              0,
                                                              G_MAXINT,
                                                              6,
-                                                             GTK_PARAM_READABLE));
+                                                             GTK_PARAM_READABLE | G_PARAM_DEPRECATED));
+
+  /**
+   * GtkAssistant:content-padding:
+   *
+   * Number of pixels around the content.
+   *
+   * Deprecated:3.20: This style property is ignored.
+   */
   gtk_widget_class_install_style_property (widget_class,
                                            g_param_spec_int ("content-padding",
                                                              P_("Content Padding"),
@@ -540,7 +559,7 @@ gtk_assistant_class_init (GtkAssistantClass *class)
                                                              0,
                                                              G_MAXINT,
                                                              1,
-                                                             GTK_PARAM_READABLE));
+                                                             GTK_PARAM_READABLE | G_PARAM_DEPRECATED));
 
   /**
    * GtkAssistant:page-type:
@@ -655,6 +674,8 @@ gtk_assistant_class_init (GtkAssistantClass *class)
   gtk_widget_class_bind_template_callback (widget_class, on_assistant_back);
   gtk_widget_class_bind_template_callback (widget_class, on_assistant_cancel);
   gtk_widget_class_bind_template_callback (widget_class, on_assistant_last);
+
+  gtk_widget_class_set_css_name (widget_class, "assistant");
 }
 
 static gint
@@ -1100,9 +1121,9 @@ alternative_button_order (GtkAssistant *assistant)
 }
 
 static void
-on_page_notify_visibility (GtkWidget  *widget,
-                           GParamSpec *arg,
-                           gpointer    data)
+on_page_notify (GtkWidget  *widget,
+                GParamSpec *arg,
+                gpointer    data)
 {
   GtkAssistant *assistant = GTK_ASSISTANT (data);
 
@@ -1153,7 +1174,7 @@ assistant_remove_page_cb (GtkContainer *container,
         }
     }
 
-  g_signal_handlers_disconnect_by_func (page_info->page, on_page_notify_visibility, assistant);
+  g_signal_handlers_disconnect_by_func (page_info->page, on_page_notify, assistant);
 
   gtk_size_group_remove_widget (priv->title_size_group, page_info->regular_title);
   gtk_size_group_remove_widget (priv->title_size_group, page_info->current_title);
@@ -1466,8 +1487,8 @@ gtk_assistant_remove (GtkContainer *container,
       assistant->priv->content != NULL &&
       gtk_widget_get_parent (box) == assistant->priv->content)
     {
-      container = (GtkContainer *) assistant->priv->content;
-      gtk_container_remove (container, box);
+      gtk_container_remove (GTK_CONTAINER (box), page);
+      gtk_container_remove (GTK_CONTAINER (assistant->priv->content), box);
     }
 }
 
@@ -1790,7 +1811,13 @@ gtk_assistant_insert_page (GtkAssistant *assistant,
   gtk_size_group_add_widget (priv->title_size_group, page_info->current_title);
 
   g_signal_connect (G_OBJECT (page), "notify::visible",
-                    G_CALLBACK (on_page_notify_visibility), assistant);
+                    G_CALLBACK (on_page_notify), assistant);
+
+  g_signal_connect (G_OBJECT (page), "child-notify::page-title",
+                    G_CALLBACK (on_page_notify), assistant);
+
+  g_signal_connect (G_OBJECT (page), "child-notify::page-type",
+                    G_CALLBACK (on_page_notify), assistant);
 
   n_pages = g_list_length (priv->pages);
 
@@ -2012,6 +2039,8 @@ gtk_assistant_set_page_title (GtkAssistant *assistant,
 
   gtk_label_set_text ((GtkLabel*) page_info->regular_title, title);
   gtk_label_set_text ((GtkLabel*) page_info->current_title, title);
+
+  update_title_state (assistant);
 
   gtk_container_child_notify (GTK_CONTAINER (assistant), page, "title");
 }

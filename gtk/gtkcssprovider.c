@@ -1048,11 +1048,11 @@
  * - The optional blur radius is parsed, but it is currently not
  * rendered by the GTK+ theming engine.
  *
- * To set a shadow on an icon, use the `icon-shadow` property instead,
+ * To set a shadow on an icon, use the `-gtk-icon-shadow` property instead,
  * with the same syntax.
  *
  * To set multiple shadows on an element, you can specify a comma-separated list
- * of shadow elements in the `text-shadow` or `icon-shadow` property. Shadows are
+ * of shadow elements in the `text-shadow` or `-gtk-icon-shadow` property. Shadows are
  * always rendered front to back (i.e. the first shadow specified is on top of the
  * others). Shadows can thus overlay each other, but they can never overlay the
  * text or icon itself, which is always rendered on top of the shadow layer.
@@ -1740,7 +1740,11 @@ gtk_css_provider_get_style_property (GtkStyleProvider *provider,
                                                  val->section,
                                                  val->section != NULL ? gtk_css_section_get_file (val->section) : NULL,
                                                  val->value);
+                  if (!val->section)
+                    gtk_css_scanner_push_section (scanner, GTK_CSS_SECTION_VALUE);
                   found = _gtk_css_style_funcs_parse_value (value, scanner->parser);
+                  if (!val->section)
+                    gtk_css_scanner_pop_section (scanner, GTK_CSS_SECTION_VALUE);
                   gtk_css_scanner_destroy (scanner);
 	          break;
                 }
@@ -1938,6 +1942,9 @@ gtk_css_provider_error (GtkCssProvider *provider,
 {
   GError *error;
   va_list args;
+
+  gtk_internal_return_if_fail (GTK_IS_CSS_PROVIDER (provider));
+  gtk_internal_return_if_fail (scanner != NULL);
 
   va_start (args, format);
   error = g_error_new_valist (domain, code, format, args);
@@ -2402,6 +2409,55 @@ name_is_style_property (const char *name)
 }
 
 static void
+warn_if_deprecated (GtkCssScanner *scanner,
+                    const gchar   *name)
+{
+  gchar *n = NULL;
+  gchar *p;
+  const gchar *type_name;
+  const gchar *property_name;
+  GType type;
+  GTypeClass *class = NULL;
+  GParamSpec *pspec;
+
+  n = g_strdup (name);
+
+  /* skip initial - */
+  type_name = n + 1;
+
+  p = strchr (type_name, '-');
+  if (!p)
+    goto out;
+
+  p[0] = '\0';
+  property_name = p + 1;
+
+  type = g_type_from_name (type_name);
+  if (type == G_TYPE_INVALID ||
+      !g_type_is_a (type, GTK_TYPE_WIDGET))
+    goto out;
+
+  class = g_type_class_ref (type);
+  pspec = gtk_widget_class_find_style_property (GTK_WIDGET_CLASS (class), property_name);
+  if (!pspec)
+    goto out;
+
+  if (!(pspec->flags & G_PARAM_DEPRECATED))
+    goto out;
+
+  _gtk_css_parser_error_full (scanner->parser,
+                              GTK_CSS_PROVIDER_ERROR_DEPRECATED,
+                              "The style property %s:%s is deprecated and shouldn't be "
+                              "used anymore. It will be removed in a future version",
+                              g_type_name (pspec->owner_type), pspec->name);
+
+out:
+  g_free (n);
+  if (class)
+    g_type_class_unref (class);
+}
+
+static void
 parse_declaration (GtkCssScanner *scanner,
                    GtkCssRuleset *ruleset)
 {
@@ -2427,6 +2483,25 @@ parse_declaration (GtkCssScanner *scanner,
       g_free (name);
       gtk_css_scanner_pop_section (scanner, GTK_CSS_SECTION_DECLARATION);
       return;
+    }
+
+  if (property != NULL && strcmp (name, property->name) != 0)
+    {
+      gtk_css_provider_error (scanner->provider,
+                              scanner,
+                              GTK_CSS_PROVIDER_ERROR,
+                              GTK_CSS_PROVIDER_ERROR_DEPRECATED,
+                              "The '%s' property has been renamed to '%s'",
+                              name, property->name);
+    }
+  else if (strcmp (name, "engine") == 0)
+    {
+      gtk_css_provider_error (scanner->provider,
+                              scanner,
+                              GTK_CSS_PROVIDER_ERROR,
+                              GTK_CSS_PROVIDER_ERROR_DEPRECATED,
+                              "The '%s' property is ignored",
+                              name);
     }
 
   if (!_gtk_css_parser_try (scanner->parser, ":", TRUE))
@@ -2503,6 +2578,8 @@ parse_declaration (GtkCssScanner *scanner,
   else if (name_is_style_property (name))
     {
       char *value_str;
+
+      warn_if_deprecated (scanner, name);
 
       gtk_css_scanner_push_section (scanner, GTK_CSS_SECTION_VALUE);
 
@@ -2721,21 +2798,32 @@ gtk_css_provider_load_internal (GtkCssProvider *css_provider,
         }
       else
         {
-          GtkCssSection *section;
-          
-          if (parent)
-            section = gtk_css_section_ref (parent->section);
+          if (parent == NULL)
+            {
+              scanner = gtk_css_scanner_new (css_provider,
+                                           parent,
+                                           parent ? parent->section : NULL,
+                                           file,
+                                           "");
+
+              gtk_css_scanner_push_section (scanner, GTK_CSS_SECTION_DOCUMENT);
+            }
           else
-            section = _gtk_css_section_new_for_file (GTK_CSS_SECTION_DOCUMENT, file);
+            scanner = parent;
 
           gtk_css_provider_error (css_provider,
-                                  parent,
+                                  scanner,
                                   GTK_CSS_PROVIDER_ERROR,
                                   GTK_CSS_PROVIDER_ERROR_IMPORT,
                                   "Failed to import: %s",
                                   load_error->message);
 
-          gtk_css_section_unref (section);
+          if (parent == NULL)
+            {
+              gtk_css_scanner_pop_section (scanner, GTK_CSS_SECTION_DOCUMENT);
+
+              gtk_css_scanner_destroy (scanner);
+            }
         }
     }
 

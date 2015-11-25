@@ -2,7 +2,6 @@ inspector_c_sources = 			\
 	inspector/action-editor.c	\
 	inspector/actions.c		\
 	inspector/cellrenderergraph.c	\
-	inspector/classes-list.c	\
 	inspector/css-editor.c		\
 	inspector/css-node-tree.c	\
 	inspector/data-list.c		\
@@ -24,7 +23,7 @@ inspector_c_sources = 			\
 	inspector/signals-list.c	\
 	inspector/size-groups.c		\
 	inspector/statistics.c		\
-	inspector/style-prop-list.c	\
+        inspector/strv-editor.c         \
 	inspector/treewalk.c		\
 	inspector/visual.c		\
 	inspector/window.c
@@ -33,7 +32,6 @@ inspector_h_sources = 			\
 	inspector/action-editor.h	\
 	inspector/actions.h		\
 	inspector/cellrenderergraph.h	\
-	inspector/classes-list.h	\
 	inspector/css-editor.h		\
 	inspector/css-node-tree.h	\
 	inspector/data-list.h		\
@@ -54,14 +52,13 @@ inspector_h_sources = 			\
 	inspector/signals-list.h	\
 	inspector/size-groups.h		\
 	inspector/statistics.h		\
-	inspector/style-prop-list.h	\
+        inspector/strv-editor.h         \
 	inspector/treewalk.h		\
 	inspector/visual.h		\
 	inspector/window.h
 
 inspector_templates =			\
 	inspector/actions.ui 		\
-	inspector/classes-list.ui 	\
 	inspector/css-editor.ui 	\
 	inspector/css-node-tree.ui	\
 	inspector/data-list.ui 		\
@@ -76,6 +73,5 @@ inspector_templates =			\
 	inspector/selector.ui		\
 	inspector/signals-list.ui	\
 	inspector/statistics.ui		\
-	inspector/style-prop-list.ui	\
 	inspector/visual.ui		\
 	inspector/window.ui

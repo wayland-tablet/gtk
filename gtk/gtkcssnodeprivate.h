@@ -93,6 +93,8 @@ struct _GtkCssNodeClass
 
 GType                   gtk_css_node_get_type           (void) G_GNUC_CONST;
 
+GtkCssNode *            gtk_css_node_new                (void);
+
 void                    gtk_css_node_set_parent         (GtkCssNode            *cssnode,
                                                          GtkCssNode            *parent);
 void                    gtk_css_node_insert_after       (GtkCssNode            *parent,
@@ -113,12 +115,15 @@ void                    gtk_css_node_set_visible        (GtkCssNode            *
                                                          gboolean               visible);
 gboolean                gtk_css_node_get_visible        (GtkCssNode            *cssnode);
 
+void                    gtk_css_node_set_name           (GtkCssNode            *cssnode,
+                                                         /*interned*/const char*name);
+/*interned*/const char *gtk_css_node_get_name           (GtkCssNode            *cssnode);
 void                    gtk_css_node_set_widget_type    (GtkCssNode            *cssnode,
                                                          GType                  widget_type);
 GType                   gtk_css_node_get_widget_type    (GtkCssNode            *cssnode);
 void                    gtk_css_node_set_id             (GtkCssNode            *cssnode,
-                                                         const char            *id);
-const char *            gtk_css_node_get_id             (GtkCssNode            *cssnode);
+                                                         /*interned*/const char*id);
+/*interned*/const char *gtk_css_node_get_id             (GtkCssNode            *cssnode);
 void                    gtk_css_node_set_state          (GtkCssNode            *cssnode,
                                                          GtkStateFlags          state_flags);
 GtkStateFlags           gtk_css_node_get_state          (GtkCssNode            *cssnode);

@@ -3,27 +3,40 @@
  * Copyright (C) 2015 Georges Basile Stavracas Neto <georges.stavracas@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, either version 2.1 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * GNU Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
+ * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include "config.h"
 
 #include <gio/gio.h>
-#include <gtk/gtk.h>
 
-#include "gtkintl.h"
 #include "gtkplacesviewrowprivate.h"
+
+/* As this widget is shared with Nautilus, we use this guard to
+ * ensure that internally we only include the files that we need
+ * instead of including gtk.h
+ */
+#ifdef GTK_COMPILATION
+#include "gtkbutton.h"
+#include "gtkeventbox.h"
+#include "gtkimage.h"
+#include "gtkintl.h"
+#include "gtklabel.h"
+#include "gtkspinner.h"
 #include "gtktypebuiltins.h"
+#else
+#include <gtk/gtk.h>
+#endif
 
 struct _GtkPlacesViewRow
 {
@@ -150,7 +163,15 @@ gtk_places_view_row_set_property (GObject      *object,
 
     case PROP_MOUNT:
       g_set_object (&self->mount, g_value_get_object (value));
-      gtk_widget_set_visible (GTK_WIDGET (self->eject_button), self->mount != NULL);
+
+      /*
+       * When we hide the eject button, no size is allocated for it. Since
+       * we want to have alignment between rows, it needs an empty space
+       * when the eject button is not available. So, call then
+       * gtk_widget_set_child_visible(), which makes the button allocate the
+       * size but it stays hidden when needed.
+       */
+      gtk_widget_set_child_visible (GTK_WIDGET (self->eject_button), self->mount != NULL);
       break;
 
     case PROP_FILE:
@@ -322,4 +343,12 @@ gtk_places_view_row_set_is_network (GtkPlacesViewRow *row,
       gtk_image_set_from_icon_name (row->eject_icon, "media-eject-symbolic", GTK_ICON_SIZE_BUTTON);
       gtk_widget_set_tooltip_text (GTK_WIDGET (row->eject_button), is_network ? _("Disconnect") : _("Unmount"));
     }
+}
+
+void
+gtk_places_view_row_set_path_size_group (GtkPlacesViewRow *row,
+                                         GtkSizeGroup     *group)
+{
+  if (group)
+    gtk_size_group_add_widget (group, GTK_WIDGET (row->path_label));
 }

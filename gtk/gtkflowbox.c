@@ -51,6 +51,22 @@
  * Also see #GtkListBox.
  *
  * GtkFlowBox was added in GTK+ 3.12.
+ *
+ * # CSS nodes
+ *
+ * |[<!-- language="plain" -->
+ * flowbox
+ * ├── flowboxchild
+ * │   ╰── child
+ * ├── flowboxchild
+ * │   ╰── child
+ * ┊
+ * ╰── [rubberband]
+ * ]|
+ *
+ * GtkFlowBox uses a single CSS node with name flowbox. GtkFlowBoxChild
+ * uses a single CSS node with name flowboxchild.
+ * For rubberband selection, a subnode with name rubberband is used.
  */
 
 #include <config.h>
@@ -62,6 +78,7 @@
 #include "gtkintl.h"
 #include "gtkcssnodeprivate.h"
 #include "gtkwidgetprivate.h"
+#include "gtkstylecontextprivate.h"
 
 #include "a11y/gtkflowboxaccessibleprivate.h"
 #include "a11y/gtkflowboxchildaccessible.h"
@@ -373,7 +390,7 @@ gtk_flow_box_child_draw (GtkWidget *widget,
 
   gtk_widget_get_allocation (widget, &allocation);
   context = gtk_widget_get_style_context (widget);
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
 
   gtk_render_background (context, cr, 0, 0, allocation.width, allocation.height);
   gtk_render_frame (context, cr, 0, 0, allocation.width, allocation.height);
@@ -616,18 +633,14 @@ gtk_flow_box_child_class_init (GtkFlowBoxChildClass *class)
   widget_class->activate_signal = child_signals[CHILD_ACTIVATE];
 
   gtk_widget_class_set_accessible_role (widget_class, ATK_ROLE_LIST_ITEM);
+  gtk_widget_class_set_css_name (widget_class, "flowboxchild");
 }
 
 static void
 gtk_flow_box_child_init (GtkFlowBoxChild *child)
 {
-  GtkStyleContext *context;
-
   gtk_widget_set_can_focus (GTK_WIDGET (child), TRUE);
   gtk_widget_set_redraw_on_allocate (GTK_WIDGET (child), TRUE);
-
-  context = gtk_widget_get_style_context (GTK_WIDGET (child));
-  gtk_style_context_add_class (context, "grid-child");
 }
 
 /* Public API {{{2 */
@@ -812,9 +825,10 @@ struct _GtkFlowBoxPrivate {
   GtkGesture        *multipress_gesture;
   GtkGesture        *drag_gesture;
 
-  gboolean           rubberband_select;
   GtkFlowBoxChild   *rubberband_first;
   GtkFlowBoxChild   *rubberband_last;
+  GtkCssNode        *rubberband_node;
+  gboolean           rubberband_select;
   gboolean           rubberband_modify;
   gboolean           rubberband_extend;
 
@@ -2563,8 +2577,7 @@ gtk_flow_box_draw (GtkWidget *widget,
       cairo_save (cr);
 
       context = gtk_widget_get_style_context (widget);
-      gtk_style_context_save (context);
-      gtk_style_context_add_class (context, GTK_STYLE_CLASS_RUBBERBAND);
+      gtk_style_context_save_to_node (context, priv->rubberband_node);
 
       iter1 = CHILD_PRIV (priv->rubberband_first)->iter;
       iter2 = CHILD_PRIV (priv->rubberband_last)->iter;
@@ -2636,7 +2649,7 @@ gtk_flow_box_draw (GtkWidget *widget,
           cairo_append_path (cr, path);
           cairo_path_destroy (path);
 
-          state = gtk_widget_get_state_flags (widget);
+          state = gtk_style_context_get_state (context);
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
           gtk_style_context_get_border_color (context, state, &border_color);
 G_GNUC_END_IGNORE_DEPRECATIONS
@@ -2862,6 +2875,7 @@ gtk_flow_box_drag_gesture_update (GtkGestureDrag *gesture,
   GtkFlowBoxPrivate *priv = BOX_PRIV (box);
   gdouble start_x, start_y;
   GtkFlowBoxChild *child;
+  GtkCssNode *widget_node;
 
   gtk_gesture_drag_get_start_point (gesture, &start_x, &start_y);
 
@@ -2870,6 +2884,13 @@ gtk_flow_box_drag_gesture_update (GtkGestureDrag *gesture,
     {
       priv->rubberband_select = TRUE;
       priv->rubberband_first = gtk_flow_box_find_child_at_pos (box, start_x, start_y);
+  
+      widget_node = gtk_widget_get_css_node (GTK_WIDGET (box));
+      priv->rubberband_node = gtk_css_node_new ();
+      gtk_css_node_set_name (priv->rubberband_node, I_("rubberband"));
+      gtk_css_node_set_parent (priv->rubberband_node, widget_node);
+      gtk_css_node_set_state (priv->rubberband_node, gtk_css_node_get_state (widget_node));
+      g_object_unref (priv->rubberband_node);
 
       /* Grab focus here, so Escape-to-stop-rubberband  works */
       gtk_flow_box_update_cursor (box, priv->rubberband_first);
@@ -3026,6 +3047,9 @@ gtk_flow_box_stop_rubberband (GtkFlowBox *box)
   priv->rubberband_select = FALSE;
   priv->rubberband_first = NULL;
   priv->rubberband_last = NULL;
+
+  gtk_css_node_set_parent (priv->rubberband_node, NULL);
+  priv->rubberband_node = NULL;
 
   remove_autoscroll (box);
 
@@ -3991,6 +4015,7 @@ gtk_flow_box_class_init (GtkFlowBoxClass *class)
                                 "unselect-all", 0);
 
   gtk_widget_class_set_accessible_type (widget_class, GTK_TYPE_FLOW_BOX_ACCESSIBLE);
+  gtk_widget_class_set_css_name (widget_class, "flowbox");
 }
 
 static void

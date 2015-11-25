@@ -1995,6 +1995,12 @@ choose_icon (GtkIconTheme       *icon_theme,
  * can then be rendered into a pixbuf using
  * gtk_icon_info_load_icon(). (gtk_icon_theme_load_icon()
  * combines these two steps if all you need is the pixbuf.)
+ *
+ * When rendering on displays with high pixel densities you should not
+ * use a @size multiplied by the scaling factor returned by functions
+ * like gdk_window_get_scale_factor(). Instead, you should use
+ * gtk_icon_theme_lookup_icon_for_scale(), as the assets loaded
+ * for a given scaling factor may be different.
  * 
  * Returns: (nullable) (transfer full): a #GtkIconInfo object
  *     containing information about the icon, or %NULL if the
@@ -2155,6 +2161,7 @@ gtk_icon_theme_choose_icon (GtkIconTheme       *icon_theme,
   g_return_val_if_fail (icon_names != NULL, NULL);
   g_return_val_if_fail ((flags & GTK_ICON_LOOKUP_NO_SVG) == 0 ||
                         (flags & GTK_ICON_LOOKUP_FORCE_SVG) == 0, NULL);
+  g_warn_if_fail ((flags & GTK_ICON_LOOKUP_GENERIC_FALLBACK) == 0);
 
   return choose_icon (icon_theme, icon_names, size, 1, flags);
 }
@@ -2196,6 +2203,7 @@ gtk_icon_theme_choose_icon_for_scale (GtkIconTheme       *icon_theme,
   g_return_val_if_fail ((flags & GTK_ICON_LOOKUP_NO_SVG) == 0 ||
                         (flags & GTK_ICON_LOOKUP_FORCE_SVG) == 0, NULL);
   g_return_val_if_fail (scale >= 1, NULL);
+  g_warn_if_fail ((flags & GTK_ICON_LOOKUP_GENERIC_FALLBACK) == 0);
 
   return choose_icon (icon_theme, icon_names, size, scale, flags);
 }
@@ -4441,7 +4449,11 @@ gtk_icon_info_load_symbolic_svg (GtkIconInfo    *icon_info,
     return NULL;
 
   if (!icon_info_ensure_scale_and_pixbuf (icon_info))
-    return NULL;
+    {
+      g_propagate_error (error, icon_info->load_error);
+      icon_info->load_error = NULL;
+      return NULL;
+    }
 
   if (icon_info->symbolic_width == 0 ||
       icon_info->symbolic_height == 0)
@@ -5373,6 +5385,12 @@ find_builtin_icon (const gchar *icon_name,
  * such as the filename of the icon. The icon can then be rendered
  * into a pixbuf using gtk_icon_info_load_icon().
  *
+ * When rendering on displays with high pixel densities you should not
+ * use a @size multiplied by the scaling factor returned by functions
+ * like gdk_window_get_scale_factor(). Instead, you should use
+ * gtk_icon_theme_lookup_by_gicon_for_scale(), as the assets loaded
+ * for a given scaling factor may be different.
+ *
  * Returns: (nullable) (transfer full): a #GtkIconInfo containing
  *     information about the icon, or %NULL if the icon wasn’t
  *     found. Unref with g_object_unref()
@@ -5419,6 +5437,7 @@ gtk_icon_theme_lookup_by_gicon_for_scale (GtkIconTheme       *icon_theme,
 
   g_return_val_if_fail (GTK_IS_ICON_THEME (icon_theme), NULL);
   g_return_val_if_fail (G_IS_ICON (icon), NULL);
+  g_warn_if_fail ((flags & GTK_ICON_LOOKUP_GENERIC_FALLBACK) == 0);
 
   if (GDK_IS_PIXBUF (icon))
     {

@@ -490,27 +490,25 @@ gtk_style_context_push_state (GtkStyleContext *context,
 {
   GtkStyleContextPrivate *priv = context->priv;
   GtkStateFlags current_state;
+  GtkCssNode *root;
 
   current_state = gtk_css_node_get_state (priv->cssnode);
 
   if (current_state == state)
     return state;
 
-  if (g_getenv ("GTK_STYLE_CONTEXT_WARNING"))
-    {
-      GtkCssNode *root = gtk_style_context_get_root (context);
+  root = gtk_style_context_get_root (context);
 
-      if (GTK_IS_CSS_WIDGET_NODE (root))
-        {
-          GtkWidget *widget = gtk_css_widget_node_get_widget (GTK_CSS_WIDGET_NODE (root));
-          g_warning ("State %u for %s %p doesn't match state %u set via gtk_style_context_set_state ()",
-                     state, gtk_widget_get_name (widget), widget, gtk_css_node_get_state (priv->cssnode));
-        }
-      else
-        {
-          g_warning ("State %u for context %p doesn't match state %u set via gtk_style_context_set_state ()",
-                     state, context, gtk_css_node_get_state (priv->cssnode));
-        }
+  if (GTK_IS_CSS_WIDGET_NODE (root))
+    {
+      GtkWidget *widget = gtk_css_widget_node_get_widget (GTK_CSS_WIDGET_NODE (root));
+      g_warning ("State %u for %s %p doesn't match state %u set via gtk_style_context_set_state ()",
+                 state, gtk_widget_get_name (widget), widget, gtk_css_node_get_state (priv->cssnode));
+    }
+  else
+    {
+      g_warning ("State %u for context %p doesn't match state %u set via gtk_style_context_set_state ()",
+                 state, context, gtk_css_node_get_state (priv->cssnode));
     }
 
   gtk_css_node_set_state (priv->cssnode, state);
@@ -1078,19 +1076,20 @@ gtk_style_context_set_path (GtkStyleContext *context,
   root = gtk_style_context_get_root (context);
   g_return_if_fail (GTK_IS_CSS_PATH_NODE (root));
 
-  if (path)
+  if (path && gtk_widget_path_length (path) > 0)
     {
       GtkWidgetPath *copy = gtk_widget_path_copy (path);
       gtk_css_path_node_set_widget_path (GTK_CSS_PATH_NODE (root), copy);
-      if (gtk_widget_path_length (copy))
-        gtk_css_node_set_widget_type (root,
-                                      gtk_widget_path_iter_get_object_type (copy, -1));
+      gtk_css_node_set_widget_type (root,
+                                    gtk_widget_path_iter_get_object_type (copy, -1));
+      gtk_css_node_set_name (root, gtk_widget_path_iter_get_object_name (copy, -1));
       gtk_widget_path_unref (copy);
     }
   else
     {
       gtk_css_path_node_set_widget_path (GTK_CSS_PATH_NODE (root), NULL);
       gtk_css_node_set_widget_type (root, G_TYPE_NONE);
+      gtk_css_node_set_name (root, NULL);
     }
 }
 
@@ -1179,6 +1178,61 @@ gtk_style_context_get_parent (GtkStyleContext *context)
   return context->priv->parent;
 }
 
+/*
+ * gtk_style_context_save_to_node:
+ * @context: a #GtkStyleContext
+ * @node: the node to save to
+ *
+ * Saves the @context state, so temporary modifications done through
+ * gtk_style_context_add_class(), gtk_style_context_remove_class(),
+ * gtk_style_context_set_state(), etc. and rendering using
+ * gtk_render_background() or similar functions are done using the
+ * given @node.
+ *
+ * To undo, call gtk_style_context_restore().
+ *
+ * The matching call to gtk_style_context_restore() must be done
+ * before GTK returns to the main loop.
+ **/
+void
+gtk_style_context_save_to_node (GtkStyleContext *context,
+                                GtkCssNode      *node)
+{
+  GtkStyleContextPrivate *priv;
+
+  g_return_if_fail (GTK_IS_STYLE_CONTEXT (context));
+  g_return_if_fail (GTK_IS_CSS_NODE (node));
+
+  priv = context->priv;
+
+  priv->saved_nodes = g_slist_prepend (priv->saved_nodes, priv->cssnode);
+  priv->cssnode = g_object_ref (node);
+}
+
+void
+gtk_style_context_save_named (GtkStyleContext *context,
+                              const char      *name)
+{
+  GtkStyleContextPrivate *priv;
+  GtkCssNode *cssnode;
+
+  priv = context->priv;
+
+  /* Make sure we have the style existing. It is the
+   * parent of the new saved node after all. */
+  if (!gtk_style_context_is_saved (context))
+    gtk_style_context_lookup_style (context);
+
+  cssnode = gtk_css_transient_node_new (priv->cssnode);
+  gtk_css_node_set_parent (cssnode, gtk_style_context_get_root (context));
+  if (name)
+    gtk_css_node_set_name (cssnode, g_intern_string (name));
+
+  gtk_style_context_save_to_node (context, cssnode);
+
+  g_object_unref (cssnode);
+}
+
 /**
  * gtk_style_context_save:
  * @context: a #GtkStyleContext
@@ -1196,24 +1250,9 @@ gtk_style_context_get_parent (GtkStyleContext *context)
 void
 gtk_style_context_save (GtkStyleContext *context)
 {
-  GtkStyleContextPrivate *priv;
-  GtkCssNode *cssnode;
-
   g_return_if_fail (GTK_IS_STYLE_CONTEXT (context));
 
-  priv = context->priv;
-
-  /* Make sure we have the style existing. It is the
-   * parent of the new saved node after all.
-   */
-  if (!gtk_style_context_is_saved (context))
-    gtk_style_context_lookup_style (context);
-
-  cssnode = gtk_css_transient_node_new (priv->cssnode);
-  gtk_css_node_set_parent (cssnode, gtk_style_context_get_root (context));
-
-  priv->saved_nodes = g_slist_prepend (priv->saved_nodes, priv->cssnode);
-  priv->cssnode = cssnode;
+  gtk_style_context_save_named (context, NULL);
 }
 
 /**

@@ -1447,88 +1447,88 @@ test_get_iter (void)
   gtk_text_buffer_set_text (buffer, "ab\nßd\r\nef", -1);
 
   /* Test get_iter_at_line() */
-  g_assert (gtk_text_buffer_get_iter_at_line (buffer, &iter, 0));
+  gtk_text_buffer_get_iter_at_line (buffer, &iter, 0);
   g_assert (gtk_text_iter_is_start (&iter));
 
-  g_assert (gtk_text_buffer_get_iter_at_line (buffer, &iter, 1));
+  gtk_text_buffer_get_iter_at_line (buffer, &iter, 1);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 3);
 
-  g_assert (gtk_text_buffer_get_iter_at_line (buffer, &iter, 2));
+  gtk_text_buffer_get_iter_at_line (buffer, &iter, 2);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 7);
 
-  g_assert (!gtk_text_buffer_get_iter_at_line (buffer, &iter, 3));
+  gtk_text_buffer_get_iter_at_line (buffer, &iter, 3);
   g_assert (gtk_text_iter_is_end (&iter));
 
   /* Test get_iter_at_line_offset() */
-  g_assert (gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 0, 0));
+  gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 0, 0);
   g_assert (gtk_text_iter_is_start (&iter));
 
-  g_assert (gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 0, 1));
+  gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 0, 1);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 1);
 
-  g_assert (gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 0, 2));
+  gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 0, 2);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 2);
 
-  g_assert (!gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 0, 3));
+  gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 0, 3);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 2);
 
-  g_assert (gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 1, 1));
+  gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 1, 1);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 4);
 
-  g_assert (gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 2, 1));
+  gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 2, 1);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 8);
 
-  g_assert (gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 2, 2));
+  gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 2, 2);
   g_assert (gtk_text_iter_is_end (&iter));
 
-  g_assert (!gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 2, 3));
+  gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 2, 3);
   g_assert (gtk_text_iter_is_end (&iter));
 
-  g_assert (!gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 3, 1));
+  gtk_text_buffer_get_iter_at_line_offset (buffer, &iter, 3, 1);
   g_assert (gtk_text_iter_is_end (&iter));
 
   /* Test get_iter_at_line_index() */
-  g_assert (gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 0, 0));
+  gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 0, 0);
   g_assert (gtk_text_iter_is_start (&iter));
 
-  g_assert (gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 0, 1));
+  gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 0, 1);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 1);
 
-  g_assert (gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 0, 2));
+  gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 0, 2);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 2);
 
-  g_assert (!gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 0, 3));
+  gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 0, 3);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 2);
 
-  g_assert (gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 1, 0));
+  gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 1, 0);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 3);
 
-  g_assert (gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 1, 2));
+  gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 1, 2);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 4);
 
-  g_assert (gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 1, 3));
+  gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 1, 3);
   offset = gtk_text_iter_get_offset (&iter);
   g_assert_cmpint (offset, ==, 5);
 
-  g_assert (gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 2, 2));
+  gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 2, 2);
   g_assert (gtk_text_iter_is_end (&iter));
 
-  g_assert (!gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 2, 3));
+  gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 2, 3);
   g_assert (gtk_text_iter_is_end (&iter));
 
-  g_assert (!gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 3, 1));
+  gtk_text_buffer_get_iter_at_line_index (buffer, &iter, 3, 1);
   g_assert (gtk_text_iter_is_end (&iter));
 
   /* Test get_iter_at_offset() */

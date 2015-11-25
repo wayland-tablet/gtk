@@ -26,9 +26,51 @@
 #include "gtksettingsprivate.h"
 #include "gtktypebuiltins.h"
 
+/*
+ * CSS nodes are the backbone of the GtkStyleContext implementation and
+ * replace the role that GtkWidgetPath played in the past. A CSS node has
+ * an element name and a state, and can have style classes, which is what
+ * is needed to determine the matching CSS selectors. CSS nodes have a
+ * 'visible' property, which makes it possible to temporarily 'hide' them
+ * from CSS matching - e.g. an invisible node will not affect :nth-child
+ * matching and so forth.
+ *
+ * CSS nodes are organized in a dom-like tree, and there is API to navigate
+ * and manipulate this tree:
+ * - gtk_css_node_set_parent
+ * - gtk_css_node_insert_before/after
+ * - gtk_css_node_get_parent
+ * - gtk_css_node_get_first/last_child
+ * - gtk_css_node_get_previous/next_sibling
+ *
+ * Every widget has one or more CSS nodes - the first one gets created
+ * automatically by GtkStyleContext. To set the name of the main node,
+ * call gtk_widget_class_set_css_name() in class_init(). Widget implementations
+ * can and should add subnodes as suitable.
+ *
+ * Best practice is:
+ * - For permanent subnodes, create them in init(), and keep a pointer
+ *   to the node (you don't have to keep a reference, cleanup will be
+ *   automatic by means of the parent node getting cleaned up by the
+ *   style context).
+ * - For transient nodes, create/destroy them when the conditions that
+ *   warrant their existence change.
+ * - Keep the state of all your nodes up-to-date. This probably requires
+ *   a ::state-flags-changed (and possibly ::direction-changed) handler,
+ *   as well as code to update the state in other places.
+ * - The draw function should just use gtk_style_context_save_to_node() to
+ *   'switch' to the right node, not make any other changes to the style
+ *   context.
+ *
+ * A noteworthy difference between gtk_style_context_save() and
+ * gtk_style_context_save_to_node() is that the former inherits all the
+ * style classes from the main CSS node, which often leads to unintended
+ * inheritance. 
+ */
+
 /* When these change we do a full restyling. Otherwise we try to figure out
  * if we need to change things. */
-#define GTK_CSS_RADICAL_CHANGE (GTK_CSS_CHANGE_NAME | GTK_CSS_CHANGE_CLASS | GTK_CSS_CHANGE_SOURCE | GTK_CSS_CHANGE_PARENT_STYLE)
+#define GTK_CSS_RADICAL_CHANGE (GTK_CSS_CHANGE_ID | GTK_CSS_CHANGE_NAME | GTK_CSS_CHANGE_CLASS | GTK_CSS_CHANGE_SOURCE | GTK_CSS_CHANGE_PARENT_STYLE)
 
 G_DEFINE_TYPE (GtkCssNode, gtk_css_node, G_TYPE_OBJECT)
 
@@ -43,6 +85,7 @@ enum {
   PROP_0,
   PROP_CLASSES,
   PROP_ID,
+  PROP_NAME,
   PROP_STATE,
   PROP_VISIBLE,
   PROP_WIDGET_TYPE,
@@ -104,6 +147,10 @@ gtk_css_node_get_property (GObject    *object,
       g_value_set_string (value, gtk_css_node_get_id (cssnode));
       break;
 
+    case PROP_NAME:
+      g_value_set_string (value, gtk_css_node_get_name (cssnode));
+      break;
+
     case PROP_STATE:
       g_value_set_flags (value, gtk_css_node_get_state (cssnode));
       break;
@@ -137,6 +184,10 @@ gtk_css_node_set_property (GObject      *object,
 
     case PROP_ID:
       gtk_css_node_set_id (cssnode, g_value_get_string (value));
+      break;
+
+    case PROP_NAME:
+      gtk_css_node_set_name (cssnode, g_value_get_string (value));
       break;
 
     case PROP_STATE:
@@ -254,7 +305,7 @@ static guint
 gtk_global_parent_cache_hash (gconstpointer item)
 {
   return gtk_css_node_declaration_hash (UNPACK_DECLARATION (item)) << 2
-    || UNPACK_FLAGS (item);
+    | UNPACK_FLAGS (item);
 }
 
 static gboolean
@@ -589,6 +640,12 @@ gtk_css_node_class_init (GtkCssNodeClass *klass)
                          NULL,
                          G_PARAM_READWRITE
                          | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
+  cssnode_properties[PROP_NAME] =
+    g_param_spec_string ("name", "Name",
+                         "Name identifying the type of node",
+                         NULL,
+                         G_PARAM_READWRITE
+                         | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS);
   cssnode_properties[PROP_STATE] =
     g_param_spec_flags ("state", "State",
                         "State flags",
@@ -620,6 +677,12 @@ gtk_css_node_init (GtkCssNode *cssnode)
   cssnode->style = g_object_ref (gtk_css_static_style_get_default ());
 
   cssnode->visible = TRUE;
+}
+
+GtkCssNode *
+gtk_css_node_new (void)
+{
+  return g_object_new (GTK_TYPE_CSS_NODE, NULL);
 }
 
 static GdkFrameClock *
@@ -984,8 +1047,11 @@ gtk_css_node_set_visible (GtkCssNode *cssnode,
                                                     | (cssnode->previous_sibling ? 0 : GTK_CSS_CHANGE_FIRST_CHILD));
 
   if (cssnode->previous_sibling)
-    gtk_css_node_invalidate (cssnode->previous_sibling, GTK_CSS_CHANGE_NTH_LAST_CHILD
-                                                        | (cssnode->next_sibling ? 0 : GTK_CSS_CHANGE_LAST_CHILD));
+    {
+      if (cssnode->next_sibling)
+        gtk_css_node_invalidate (cssnode->previous_sibling, GTK_CSS_CHANGE_LAST_CHILD);
+      gtk_css_node_invalidate (cssnode->parent->first_child, GTK_CSS_CHANGE_NTH_LAST_CHILD);
+    }
 }
 
 gboolean
@@ -995,12 +1061,31 @@ gtk_css_node_get_visible (GtkCssNode *cssnode)
 }
 
 void
+gtk_css_node_set_name (GtkCssNode              *cssnode,
+                       /*interned*/ const char *name)
+{
+  if (gtk_css_node_declaration_set_name (&cssnode->decl, name))
+    {
+      gtk_css_node_invalidate (cssnode, GTK_CSS_CHANGE_NAME);
+      g_object_notify_by_pspec (G_OBJECT (cssnode), cssnode_properties[PROP_NAME]);
+      g_object_notify_by_pspec (G_OBJECT (cssnode), cssnode_properties[PROP_WIDGET_TYPE]);
+    }
+}
+
+/* interned */ const char *
+gtk_css_node_get_name (GtkCssNode *cssnode)
+{
+  return gtk_css_node_declaration_get_name (cssnode->decl);
+}
+
+void
 gtk_css_node_set_widget_type (GtkCssNode *cssnode,
                               GType       widget_type)
 {
   if (gtk_css_node_declaration_set_type (&cssnode->decl, widget_type))
     {
       gtk_css_node_invalidate (cssnode, GTK_CSS_CHANGE_NAME);
+      g_object_notify_by_pspec (G_OBJECT (cssnode), cssnode_properties[PROP_NAME]);
       g_object_notify_by_pspec (G_OBJECT (cssnode), cssnode_properties[PROP_WIDGET_TYPE]);
     }
 }
@@ -1012,8 +1097,8 @@ gtk_css_node_get_widget_type (GtkCssNode *cssnode)
 }
 
 void
-gtk_css_node_set_id (GtkCssNode *cssnode,
-                     const char *id)
+gtk_css_node_set_id (GtkCssNode                *cssnode,
+                     /* interned */ const char *id)
 {
   if (gtk_css_node_declaration_set_id (&cssnode->decl, id))
     {
@@ -1022,7 +1107,7 @@ gtk_css_node_set_id (GtkCssNode *cssnode,
     }
 }
 
-const char *
+/* interned */ const char *
 gtk_css_node_get_id (GtkCssNode *cssnode)
 {
   return gtk_css_node_declaration_get_id (cssnode->decl);
@@ -1149,16 +1234,14 @@ gtk_css_node_add_region (GtkCssNode     *cssnode,
                          GQuark          region,
                          GtkRegionFlags  flags)
 {
-  if (gtk_css_node_declaration_add_region (&cssnode->decl, region, flags))
-    gtk_css_node_invalidate (cssnode, GTK_CSS_CHANGE_REGION);
+  gtk_css_node_declaration_add_region (&cssnode->decl, region, flags);
 }
 
 void
 gtk_css_node_remove_region (GtkCssNode *cssnode,
                             GQuark      region)
 {
-  if (gtk_css_node_declaration_remove_region (&cssnode->decl, region))
-    gtk_css_node_invalidate (cssnode, GTK_CSS_CHANGE_REGION);
+  gtk_css_node_declaration_remove_region (&cssnode->decl, region);
 }
 
 gboolean

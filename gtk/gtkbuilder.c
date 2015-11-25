@@ -478,7 +478,8 @@ gtk_builder_get_parameters (GtkBuilder  *builder,
       parameter.name = prop->pspec->name;
 
       if (G_IS_PARAM_SPEC_OBJECT (prop->pspec) &&
-          (G_PARAM_SPEC_VALUE_TYPE (prop->pspec) != GDK_TYPE_PIXBUF))
+          (G_PARAM_SPEC_VALUE_TYPE (prop->pspec) != GDK_TYPE_PIXBUF) &&
+          (G_PARAM_SPEC_VALUE_TYPE (prop->pspec) != G_TYPE_FILE))
         {
           GObject *object = g_hash_table_lookup (builder->priv->objects,
                                                  prop->text->str);
@@ -1109,10 +1110,23 @@ gtk_builder_add_objects_from_file (GtkBuilder   *builder,
   return 1;
 }
 
-/* Main private entry point for building composite container
+
+/**
+ * gtk_builder_extend_with_template:
+ * @builder: a #GtkBuilder
+ * @widget: the widget that is being extended
+ * @template_type: the type that the template is for
+ * @buffer: the string to parse
+ * @length: the length of @buffer (may be -1 if @buffer is nul-terminated)
+ * @error: (allow-none): return location for an error, or %NULL
+ *
+ * Main private entry point for building composite container
  * components from template XML.
+ *
  * This is exported purely to let gtk-builder-tool validate
  * templates, applications have no need to call this function.
+ *
+ * Returns: A positive value on success, 0 if an error occurred
  */
 guint
 gtk_builder_extend_with_template (GtkBuilder   *builder,
@@ -2031,6 +2045,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
         }
       break;
     case G_TYPE_OBJECT:
+    case G_TYPE_INTERFACE:
       if (G_VALUE_HOLDS (value, GDK_TYPE_PIXBUF))
         {
           gchar *filename;
@@ -2088,6 +2103,27 @@ G_GNUC_END_IGNORE_DEPRECATIONS
             }
 
           g_free (filename);
+
+          ret = TRUE;
+        }
+      else if (G_VALUE_HOLDS (value, G_TYPE_FILE))
+        {
+          GFile *file;
+
+          if (g_hash_table_contains (builder->priv->objects, string))
+            {
+              g_set_error (error,
+                           GTK_BUILDER_ERROR,
+                           GTK_BUILDER_ERROR_INVALID_VALUE,
+                           "Could not create file '%s': "
+                           " '%s' is already used as object id",
+                           string, string);
+              return FALSE;
+            }
+
+          file = g_file_new_for_uri (string);
+          g_value_set_object (value, file);
+          g_object_unref (G_OBJECT (file));
 
           ret = TRUE;
         }

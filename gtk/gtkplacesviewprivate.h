@@ -3,19 +3,18 @@
  * Copyright (C) 2015 Georges Basile Stavracas Neto <georges.stavracas@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
+ * it under the terms of the GNU Lesser General Public License as published
+ * by the Free Software Foundation, either version 2.1 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * GNU Lesser General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-
 
 #ifndef GTK_PLACES_VIEW_H
 #define GTK_PLACES_VIEW_H
@@ -63,32 +62,23 @@ struct _GtkPlacesView
   GtkBox parent_instance;
 };
 
-GDK_AVAILABLE_IN_3_18
 GType              gtk_places_view_get_type                      (void) G_GNUC_CONST;
 
-GDK_AVAILABLE_IN_3_18
 GtkPlacesOpenFlags gtk_places_view_get_open_flags                (GtkPlacesView      *view);
-GDK_AVAILABLE_IN_3_18
 void               gtk_places_view_set_open_flags                (GtkPlacesView      *view,
                                                                   GtkPlacesOpenFlags  flags);
 
-GDK_AVAILABLE_IN_3_18
 const gchar*       gtk_places_view_get_search_query              (GtkPlacesView      *view);
-GDK_AVAILABLE_IN_3_18
 void               gtk_places_view_set_search_query              (GtkPlacesView      *view,
                                                                   const gchar        *query_text);
 
-GDK_AVAILABLE_IN_3_18
 gboolean           gtk_places_view_get_local_only                (GtkPlacesView         *view);
 
-GDK_AVAILABLE_IN_3_18
 void               gtk_places_view_set_local_only                (GtkPlacesView         *view,
                                                                   gboolean               local_only);
 
-GDK_AVAILABLE_IN_3_18
 gboolean           gtk_places_view_get_loading                   (GtkPlacesView         *view);
 
-GDK_AVAILABLE_IN_3_18
 GtkWidget *        gtk_places_view_new                           (void);
 
 G_END_DECLS

@@ -26,7 +26,6 @@
 
 #include "actions.h"
 #include "cellrenderergraph.h"
-#include "classes-list.h"
 #include "css-editor.h"
 #include "css-node-tree.h"
 #include "data-list.h"
@@ -44,7 +43,6 @@
 #include "signals-list.h"
 #include "size-groups.h"
 #include "statistics.h"
-#include "style-prop-list.h"
 #include "visual.h"
 #include "window.h"
 
@@ -60,7 +58,6 @@ gtk_inspector_init (void)
   g_type_ensure (GTK_TYPE_CELL_RENDERER_GRAPH);
   g_type_ensure (GTK_TYPE_GRAPH_DATA);
   g_type_ensure (GTK_TYPE_INSPECTOR_ACTIONS);
-  g_type_ensure (GTK_TYPE_INSPECTOR_CLASSES_LIST);
   g_type_ensure (GTK_TYPE_INSPECTOR_CSS_EDITOR);
   g_type_ensure (GTK_TYPE_INSPECTOR_CSS_NODE_TREE);
   g_type_ensure (GTK_TYPE_INSPECTOR_DATA_LIST);
@@ -78,7 +75,6 @@ gtk_inspector_init (void)
   g_type_ensure (GTK_TYPE_INSPECTOR_SIGNALS_LIST);
   g_type_ensure (GTK_TYPE_INSPECTOR_SIZE_GROUPS);
   g_type_ensure (GTK_TYPE_INSPECTOR_STATISTICS);
-  g_type_ensure (GTK_TYPE_INSPECTOR_STYLE_PROP_LIST);
   g_type_ensure (GTK_TYPE_INSPECTOR_VISUAL);
   g_type_ensure (GTK_TYPE_INSPECTOR_WINDOW);
 

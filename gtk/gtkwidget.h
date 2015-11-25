@@ -663,6 +663,8 @@ GDK_AVAILABLE_IN_ALL
 void	   gtk_widget_queue_resize	  (GtkWidget	       *widget);
 GDK_AVAILABLE_IN_ALL
 void	   gtk_widget_queue_resize_no_redraw (GtkWidget *widget);
+GDK_AVAILABLE_IN_3_20
+void       gtk_widget_queue_allocate      (GtkWidget           *widget);
 GDK_AVAILABLE_IN_3_8
 GdkFrameClock* gtk_widget_get_frame_clock (GtkWidget           *widget);
 
@@ -781,6 +783,11 @@ GDK_AVAILABLE_IN_3_2
 gboolean   gtk_widget_has_visible_focus   (GtkWidget           *widget);
 GDK_AVAILABLE_IN_ALL
 void       gtk_widget_grab_focus          (GtkWidget           *widget);
+GDK_AVAILABLE_IN_3_20
+void       gtk_widget_set_focus_on_click  (GtkWidget           *widget,
+                                           gboolean             focus_on_click);
+GDK_AVAILABLE_IN_3_20
+gboolean   gtk_widget_get_focus_on_click  (GtkWidget           *widget);
 
 GDK_AVAILABLE_IN_ALL
 void       gtk_widget_set_can_default     (GtkWidget           *widget,
@@ -918,6 +925,10 @@ GDK_AVAILABLE_IN_ALL
 int                   gtk_widget_get_allocated_height   (GtkWidget     *widget);
 GDK_AVAILABLE_IN_3_10
 int                   gtk_widget_get_allocated_baseline (GtkWidget     *widget);
+GDK_AVAILABLE_IN_3_20
+void                  gtk_widget_get_allocated_size     (GtkWidget     *widget,
+                                                         GtkAllocation *allocation,
+                                                         int           *baseline);
 
 GDK_AVAILABLE_IN_ALL
 void                  gtk_widget_get_allocation         (GtkWidget     *widget,
@@ -1302,6 +1313,12 @@ GtkStyleContext * gtk_widget_get_style_context (GtkWidget *widget);
 GDK_AVAILABLE_IN_ALL
 GtkWidgetPath *   gtk_widget_get_path (GtkWidget *widget);
 
+GDK_AVAILABLE_IN_3_20
+void              gtk_widget_class_set_css_name (GtkWidgetClass *widget_class,
+                                                 const char     *name);
+GDK_AVAILABLE_IN_3_20
+const char *      gtk_widget_class_get_css_name (GtkWidgetClass *widget_class);
+
 GDK_AVAILABLE_IN_3_4
 GdkModifierType   gtk_widget_get_modifier_mask (GtkWidget         *widget,
                                                 GdkModifierIntent  intent);
@@ -1472,6 +1489,9 @@ void                    gtk_widget_set_font_map         (GtkWidget             *
                                                          PangoFontMap          *font_map);
 GDK_AVAILABLE_IN_3_18
 PangoFontMap *          gtk_widget_get_font_map         (GtkWidget             *widget);
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkWidget, g_object_unref)
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkRequisition, gtk_requisition_free)
 
 G_END_DECLS
 

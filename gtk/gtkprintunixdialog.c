@@ -56,6 +56,8 @@
 #include "gtkprivate.h"
 #include "gtktypebuiltins.h"
 #include "gtkdialogprivate.h"
+#include "gtkstylecontextprivate.h"
+#include "gtkwidgetprivate.h"
 
 
 /**
@@ -793,6 +795,8 @@ gtk_print_unix_dialog_init (GtkPrintUnixDialog *dialog)
 
   /* Load custom papers */
   _gtk_print_load_custom_papers (priv->custom_paper_list);
+
+  gtk_css_node_set_name (gtk_widget_get_css_node (priv->collate_image), I_("paper"));
 }
 
 static void
@@ -2223,11 +2227,6 @@ paint_page (GtkWidget *widget,
 
   context = gtk_widget_get_style_context (widget);
 
-  gtk_style_context_save (context);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_FRAME);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_PAPER);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_VIEW);
-
   gtk_render_background (context, cr, x, y, width, height);
   gtk_render_frame (context, cr, x, y, width, height);
 
@@ -2237,8 +2236,6 @@ paint_page (GtkWidget *widget,
   cairo_set_font_size (cr, 9);
   cairo_move_to (cr, x + text_x, y + text_y);
   cairo_show_text (cr, text);
-
-  gtk_style_context_restore (context);
 }
 
 static gboolean
@@ -2288,7 +2285,7 @@ draw_collate_cb (GtkWidget          *widget,
 
       paint_page (widget, cr, x2 + p1, y, reverse ? "1" : "2", text_x);
       paint_page (widget, cr, x2 + p2, y + 10, collate == reverse ? "2" : "1", text_x);
-    }    
+    }
 
   return TRUE;
 }
@@ -2671,7 +2668,6 @@ draw_page_cb (GtkWidget          *widget,
   gdouble pos_x, pos_y;
   gint pages_per_sheet;
   gboolean ltr = TRUE;
-  GtkStateFlags state;
 
   orientation = gtk_page_setup_get_orientation (priv->page_setup);
   landscape =
@@ -2681,7 +2677,6 @@ draw_page_cb (GtkWidget          *widget,
   number_up_layout = dialog_get_number_up_layout (dialog);
   width = gtk_widget_get_allocated_width (widget);
   height = gtk_widget_get_allocated_height (widget);
-  state = gtk_widget_get_state_flags (widget);
 
   cairo_save (cr);
 
@@ -2762,10 +2757,7 @@ draw_page_cb (GtkWidget          *widget,
     }
 
   context = gtk_widget_get_style_context (widget);
-
-  gtk_style_context_save (context);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_PAPER);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_VIEW);
+  gtk_style_context_get_color (context, gtk_style_context_get_state (context), &color);
 
   pos_x = (width - w) / 2;
   pos_y = (height - h) / 2 - 10;
@@ -2773,7 +2765,6 @@ draw_page_cb (GtkWidget          *widget,
 
   shadow_offset = 3;
 
-  gtk_style_context_get_color (context, state, &color);
   cairo_set_source_rgba (cr, color.red, color.green, color.blue, 0.5);
   cairo_rectangle (cr, shadow_offset + 1, shadow_offset + 1, w, h);
   cairo_fill (cr);
@@ -2782,7 +2773,6 @@ draw_page_cb (GtkWidget          *widget,
 
   cairo_set_line_width (cr, 1.0);
   cairo_rectangle (cr, 0.5, 0.5, w + 1, h + 1);
-  gtk_style_context_get_color (context, state, &color);
   gdk_cairo_set_source_rgba (cr, &color);
   cairo_stroke (cr);
 
@@ -2984,7 +2974,6 @@ draw_page_cb (GtkWidget          *widget,
         cairo_translate (cr, pos_x + w + shadow_offset + 2 * RULER_DISTANCE,
                              (height - layout_h / PANGO_SCALE) / 2);
 
-      gtk_style_context_get_color (context, state, &color);
       gdk_cairo_set_source_rgba (cr, &color);
       pango_cairo_show_layout (cr, layout);
 
@@ -3003,7 +2992,6 @@ draw_page_cb (GtkWidget          *widget,
       cairo_translate (cr, (width - layout_w / PANGO_SCALE) / 2,
                            pos_y + h + shadow_offset + 2 * RULER_DISTANCE);
 
-      gtk_style_context_get_color (context, state, &color);
       gdk_cairo_set_source_rgba (cr, &color);
       pango_cairo_show_layout (cr, layout);
 
@@ -3013,7 +3001,6 @@ draw_page_cb (GtkWidget          *widget,
 
       cairo_set_line_width (cr, 1);
 
-      gtk_style_context_get_color (context, state, &color);
       gdk_cairo_set_source_rgba (cr, &color);
 
       if (ltr)
@@ -3057,8 +3044,6 @@ draw_page_cb (GtkWidget          *widget,
       cairo_line_to (cr, pos_x + w + 0.5, pos_y + h + shadow_offset + RULER_DISTANCE + RULER_RADIUS);
       cairo_stroke (cr);
     }
-
-  gtk_style_context_restore (context);
 
   return TRUE;
 }

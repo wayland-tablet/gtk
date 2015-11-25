@@ -166,12 +166,14 @@ get_item_appearance (PangoItem *item)
   return NULL;
 }
 
+extern GtkCssNode *gtk_text_view_get_text_node      (GtkTextView *text_view);
+extern GtkCssNode *gtk_text_view_get_selection_node (GtkTextView *text_view);
+
 static void
 gtk_text_renderer_prepare_run (PangoRenderer  *renderer,
 			       PangoLayoutRun *run)
 {
   GtkStyleContext *context;
-  GtkStateFlags state;
   GtkTextRenderer *text_renderer = GTK_TEXT_RENDERER (renderer);
   GdkRGBA *bg_rgba = NULL;
   GdkRGBA *fg_rgba = NULL;
@@ -183,24 +185,30 @@ gtk_text_renderer_prepare_run (PangoRenderer  *renderer,
   g_assert (appearance != NULL);
 
   context = gtk_widget_get_style_context (text_renderer->widget);
-  state   = gtk_widget_get_state_flags (text_renderer->widget);
 
   if (appearance->draw_bg && text_renderer->state == NORMAL)
     bg_rgba = appearance->rgba[0];
   else
     bg_rgba = NULL;
-  
+
   text_renderer_set_rgba (text_renderer, PANGO_RENDER_PART_BACKGROUND, bg_rgba);
 
   if (text_renderer->state == SELECTED)
     {
-      state |= GTK_STATE_FLAG_SELECTED;
+      GtkCssNode *selection_node;
 
-      gtk_style_context_get (context, state, "color", &fg_rgba, NULL);
+      selection_node = gtk_text_view_get_selection_node ((GtkTextView *)text_renderer->widget);
+      gtk_style_context_save_to_node (context, selection_node);
+
+      gtk_style_context_get (context, gtk_style_context_get_state (context),
+                             "color", &fg_rgba,
+                             NULL);
+
+      gtk_style_context_restore (context);
     }
   else if (text_renderer->state == CURSOR && gtk_widget_has_focus (text_renderer->widget))
     {
-      gtk_style_context_get (context, state,
+      gtk_style_context_get (context, gtk_style_context_get_state (context),
                              "background-color", &fg_rgba,
                               NULL);
     }
@@ -238,7 +246,7 @@ gtk_text_renderer_prepare_run (PangoRenderer  *renderer,
 
 	  if (color)
 	    {
-	      GdkRGBA   rgba;
+	      GdkRGBA rgba;
 
 	      rgba.red = color->red / 65535.;
 	      rgba.green = color->green / 65535.;
@@ -514,16 +522,17 @@ text_renderer_begin (GtkTextRenderer *text_renderer,
   GtkStyleContext *context;
   GtkStateFlags state;
   GdkRGBA color;
+  GtkCssNode *text_node;
 
   text_renderer->widget = widget;
   text_renderer->cr = cr;
 
   context = gtk_widget_get_style_context (widget);
 
-  gtk_style_context_save (context);
-  gtk_style_context_add_class (context, GTK_STYLE_CLASS_VIEW);
+  text_node = gtk_text_view_get_text_node ((GtkTextView *)widget);
+  gtk_style_context_save_to_node (context, text_node);
 
-  state = gtk_widget_get_state_flags (widget);
+  state = gtk_style_context_get_state (context);
   gtk_style_context_get_color (context, state, &color);
 
   cairo_save (cr);
@@ -598,7 +607,6 @@ render_para (GtkTextRenderer    *text_renderer,
              int                 selection_end_index)
 {
   GtkStyleContext *context;
-  GtkStateFlags state;
   PangoLayout *layout = line_display->layout;
   int byte_offset = 0;
   PangoLayoutIter *iter;
@@ -606,6 +614,7 @@ render_para (GtkTextRenderer    *text_renderer,
   int screen_width;
   GdkRGBA selection;
   gboolean first = TRUE;
+  GtkCssNode *selection_node;
 
   iter = pango_layout_get_iter (layout);
 
@@ -619,14 +628,11 @@ render_para (GtkTextRenderer    *text_renderer,
   screen_width = line_display->total_width;
 
   context = gtk_widget_get_style_context (text_renderer->widget);
-  gtk_style_context_save (context);
-
-  state = gtk_style_context_get_state (context);
-  state |= GTK_STATE_FLAG_SELECTED;
-  gtk_style_context_set_state (context, state);
+  selection_node = gtk_text_view_get_selection_node ((GtkTextView*)text_renderer->widget);
+  gtk_style_context_save_to_node (context, selection_node);
 
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-  gtk_style_context_get_background_color (context, state, &selection);
+  gtk_style_context_get_background_color (context, gtk_style_context_get_state (context), &selection);
 G_GNUC_END_IGNORE_DEPRECATIONS
 
  gtk_style_context_restore (context);
@@ -820,9 +826,8 @@ G_GNUC_END_IGNORE_DEPRECATIONS
                 {
                   GdkRGBA color;
 
-                  state = gtk_widget_get_state_flags (text_renderer->widget);
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-                  gtk_style_context_get_background_color (context, state, &color);
+                  gtk_style_context_get_background_color (context, gtk_style_context_get_state (context), &color);
 G_GNUC_END_IGNORE_DEPRECATIONS
 
                   gdk_cairo_set_source_rgba (cr, &color);
