@@ -15,7 +15,7 @@
   font-variant: inherit;
   font-weight: inherit;
   text-shadow: inherit;
-  icon-shadow: inherit;
+  -gtk-icon-shadow: inherit;
   box-shadow: initial;
   margin-top: initial;
   margin-left: initial;
@@ -59,8 +59,7 @@
   transition-duration: initial;
   transition-timing-function: initial;
   transition-delay: initial;
-  engine: initial;
-  gtk-key-bindings: initial;
+  -gtk-key-bindings: initial;
 
   -GtkNotebook-initial-gap: 0;
 }

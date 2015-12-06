@@ -1147,7 +1147,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
       gtk_popover_apply_tail_path (popover, cr);
       gdk_cairo_set_source_rgba (cr, &border_color);
 
-      cairo_set_line_width (cr, border.bottom + 1);
+      cairo_set_line_width (cr, border.bottom + 1.0);
       cairo_stroke (cr);
     }
 
@@ -1159,7 +1159,7 @@ G_GNUC_END_IGNORE_DEPRECATIONS
   if (child)
     gtk_container_propagate_draw (GTK_CONTAINER (widget), child, cr);
 
-  return TRUE;
+  return GDK_EVENT_PROPAGATE;
 }
 
 static void
