@@ -27,7 +27,9 @@ BUILT_SOURCES = 				\
 	gtk-primary-selection-client-protocol.h			\
 	gtk-primary-selection-protocol.c			\
 	gtk-shell-client-protocol.h		\
-	gtk-shell-protocol.c
+	gtk-shell-protocol.c			\
+	tablet-unstable-v1-client-protocol.h			\
+	tablet-unstable-v1-protocol.c
 
 nodist_libgdk_wayland_la_SOURCES =		\
 	$(BUILT_SOURCES)
