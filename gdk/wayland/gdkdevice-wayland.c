@@ -127,6 +127,7 @@ struct _GdkWaylandTabletToolInfo
   enum zwp_tablet_tool_v1_capability capability;
 
   GdkDeviceTool *tool;
+  gchar status;
 };
 
 struct _GdkWaylandSeat
@@ -2890,6 +2891,197 @@ tablet_tool_handle_removed (void                      *data,
 }
 
 static void
+tablet_tool_handle_proximity_in (void                      *data,
+                                 struct zwp_tablet_tool_v1 *wp_tool,
+                                 uint32_t                   serial,
+                                 struct zwp_tablet_v1      *tablet,
+                                 struct wl_surface         *surface)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  GdkWaylandTabletDeviceInfo *deviceinfo = zwp_tablet_v1_get_user_data (tablet);
+  GdkWindow *window = wl_surface_get_user_data (surface);
+  GdkWaylandDeviceTabletPair *device_pair = deviceinfo->pair;
+  GdkWaylandSeat *seat = device_pair->seat;
+  GdkWaylandDisplay *wayland_display = GDK_WAYLAND_DISPLAY (seat->display);
+
+  if (!surface)
+    return;
+  if (!GDK_IS_WINDOW (window))
+    return;
+
+  toolinfo->deviceinfo = deviceinfo;
+  toolinfo->status = 1;
+
+  device_pair->deviceinfo = deviceinfo;
+  device_pair->toolinfo = toolinfo;
+
+  _gdk_wayland_display_update_serial (wayland_display, serial);
+  device_pair->pointer_info.enter_serial = serial;
+
+  device_pair->pointer_info.focus = g_object_ref (window);
+  device_pair->current_device =
+    tablet_select_device_for_tool (device_pair, toolinfo->tool);
+
+  /* Add the tool to the device if we haven't already done so */
+  if (serial != 0 &&
+      !gdk_device_lookup_tool (device_pair->current_device, serial))
+    gdk_device_add_tool (device_pair->current_device, toolinfo->tool);
+
+  gdk_device_update_tool (device_pair->current_device, toolinfo->tool);
+}
+
+static void
+tablet_tool_handle_proximity_out (void                      *data,
+                                  struct zwp_tablet_tool_v1 *wp_tool)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+
+  toolinfo->status = -1;
+}
+
+static void
+tablet_tool_handle_motion (void                      *data,
+                           struct zwp_tablet_tool_v1 *wp_tool,
+                           wl_fixed_t                 sx,
+                           wl_fixed_t                 sy)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  GdkWaylandTabletDeviceInfo *deviceinfo = toolinfo->deviceinfo;
+  GdkWaylandDeviceTabletPair *device_pair = deviceinfo->pair;
+
+  device_pair->pointer_info.time = (guint32)(g_get_monotonic_time () / 1000);
+  device_pair->pointer_info.surface_x = wl_fixed_to_double (sx);
+  device_pair->pointer_info.surface_y = wl_fixed_to_double (sy);
+}
+
+static void
+tablet_tool_handle_frame (void                      *data,
+                          struct zwp_tablet_tool_v1 *wp_tool,
+                          uint32_t                   time)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  GdkWaylandTabletDeviceInfo *deviceinfo = toolinfo->deviceinfo;
+  GdkWaylandDeviceTabletPair *device_pair = deviceinfo->pair;
+  GdkWaylandSeat *seat = device_pair->seat;
+  GdkWaylandDisplay *wayland_display = GDK_WAYLAND_DISPLAY (seat->display);
+  GdkEvent *event;
+
+  if (!device_pair->pointer_info.focus)
+    return;
+
+  device_pair->pointer_info.time = time;
+
+  if (toolinfo->status == 1)
+    {
+      event = gdk_event_new (GDK_PROXIMITY_IN);
+      event->proximity.type = GDK_PROXIMITY_IN;
+      event->proximity.window = g_object_ref (device_pair->pointer_info.focus);
+      gdk_event_set_device (event, device_pair->master);
+      gdk_event_set_source_device (event, device_pair->current_device);
+      event->proximity.time = device_pair->pointer_info.time;
+
+      GDK_NOTE (EVENTS,
+                g_message ("proximity in, tool %d",
+                           gdk_device_tool_get_tool_type (toolinfo->tool)));
+
+      _gdk_wayland_display_deliver_event (seat->display, event);
+
+      gdk_wayland_seat_update_window_cursor (device_pair->master);
+
+      event = gdk_event_new (GDK_ENTER_NOTIFY);
+      event->crossing.window = g_object_ref (device_pair->pointer_info.focus);
+      gdk_event_set_device (event, device_pair->master);
+      gdk_event_set_source_device (event, device_pair->current_device);
+      event->crossing.subwindow = NULL;
+      event->crossing.time = device_pair->pointer_info.time;
+      event->crossing.mode = GDK_CROSSING_NORMAL;
+      event->crossing.detail = GDK_NOTIFY_ANCESTOR;
+      event->crossing.focus = TRUE;
+      event->crossing.state = device_get_modifiers (device_pair->master);
+
+      get_coordinates (&device_pair->pointer_info,
+                       &event->crossing.x,
+                       &event->crossing.y,
+                       &event->crossing.x_root,
+                       &event->crossing.y_root);
+
+      GDK_NOTE (EVENTS,
+                g_message ("enter, seat %p surface %p",
+                           seat, device_pair->pointer_info.focus));
+
+      _gdk_wayland_display_deliver_event (seat->display, event);
+    }
+
+  event = gdk_event_new (GDK_MOTION_NOTIFY);
+  event->motion.window = g_object_ref (device_pair->pointer_info.focus);
+  gdk_event_set_device (event, device_pair->master);
+  gdk_event_set_source_device (event, device_pair->current_device);
+  event->motion.time = device_pair->pointer_info.time;
+  event->motion.state = device_get_modifiers (device_pair->master);
+  event->motion.is_hint = FALSE;
+  gdk_event_set_screen (event, wayland_display->screen);
+
+  get_coordinates (&device_pair->pointer_info,
+                   &event->motion.x,
+                   &event->motion.y,
+                   &event->motion.x_root,
+                   &event->motion.y_root);
+
+  GDK_NOTE (EVENTS,
+            g_message ("tablet motion %lf %lf, state %d",
+                       device_pair->pointer_info.surface_x,
+                       device_pair->pointer_info.surface_y,
+                       event->button.state));
+
+  _gdk_wayland_display_deliver_event (seat->display, event);
+
+  if (toolinfo->status == -1)
+    {
+      event = gdk_event_new (GDK_LEAVE_NOTIFY);
+      event->crossing.window = g_object_ref (device_pair->pointer_info.focus);
+      gdk_event_set_device (event, device_pair->master);
+      gdk_event_set_source_device (event, device_pair->current_device);
+      event->crossing.subwindow = NULL;
+      event->motion.time = device_pair->pointer_info.time;
+      event->crossing.mode = GDK_CROSSING_NORMAL;
+      event->crossing.detail = GDK_NOTIFY_ANCESTOR;
+      event->crossing.focus = TRUE;
+      event->crossing.state = device_get_modifiers (device_pair->master);
+
+      get_coordinates (&device_pair->pointer_info,
+                       &event->crossing.x,
+                       &event->crossing.y,
+                       &event->crossing.x_root,
+                       &event->crossing.y_root);
+      GDK_NOTE (EVENTS,
+                g_message ("leave, seat %p surface %p",
+                           seat, device_pair->pointer_info.focus));
+
+      _gdk_wayland_display_deliver_event (seat->display, event);
+
+      event = gdk_event_new (GDK_PROXIMITY_OUT);
+      event->proximity.window = g_object_ref (device_pair->pointer_info.focus);
+      gdk_event_set_device (event, device_pair->master);
+      gdk_event_set_source_device (event, device_pair->current_device);
+      event->motion.time = device_pair->pointer_info.time;
+
+      GDK_NOTE (EVENTS,
+                g_message ("proximity out"));
+
+      _gdk_wayland_display_deliver_event (seat->display, event);
+
+      if (seat->cursor)
+        gdk_wayland_pointer_stop_cursor_animation (&device_pair->pointer_info);
+
+      gdk_wayland_seat_update_window_cursor (device_pair->master);
+      g_object_unref (device_pair->pointer_info.focus);
+      device_pair->pointer_info.focus = NULL;
+    }
+
+    toolinfo->status = 0;
+}
+
+static void
 tablet_handle_name (void                 *data,
                     struct zwp_tablet_v1 *wp_tablet,
                     const char           *name)
@@ -2965,11 +3157,11 @@ static const struct zwp_tablet_tool_v1_listener tablet_tool_listener = {
   tablet_tool_handle_capability,
   tablet_tool_handle_done,
   tablet_tool_handle_removed,
-  tablet_handler_placeholder, /* proximity_in */
-  tablet_handler_placeholder, /* proximity_out */
+  tablet_tool_handle_proximity_in,
+  tablet_tool_handle_proximity_out,
   tablet_handler_placeholder, /* down */
   tablet_handler_placeholder, /* up */
-  tablet_handler_placeholder, /* motion */
+  tablet_tool_handle_motion,
   tablet_handler_placeholder, /* pressure */
   tablet_handler_placeholder, /* distance */
   tablet_handler_placeholder, /* tilt */
@@ -2977,7 +3169,7 @@ static const struct zwp_tablet_tool_v1_listener tablet_tool_listener = {
   tablet_handler_placeholder, /* slider */
   tablet_handler_placeholder, /* wheel */
   tablet_handler_placeholder, /* button */
-  tablet_handler_placeholder  /* frame */
+  tablet_tool_handle_frame
 };
 
 static const struct zwp_tablet_v1_listener tablet_listener = {
