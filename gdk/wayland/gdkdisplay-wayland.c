@@ -329,7 +329,6 @@ gdk_registry_handle_global (void               *data,
                             uint32_t            version)
 {
   GdkWaylandDisplay *display_wayland = data;
-  struct wl_tablet_manager *tablet_manager;
   struct wl_output *output;
   gboolean handled = TRUE;
 
@@ -419,11 +418,13 @@ gdk_registry_handle_global (void               *data,
         wl_registry_bind(display_wayland->wl_registry, id,
                          &gtk_primary_selection_device_manager_interface, 1);
     }
-  else if (strcmp (interface, "wl_tablet_manager") == 0)
+  else if (strcmp (interface, "zwp_tablet_manager_v1") == 0)
     {
-      tablet_manager = wl_registry_bind(display_wayland->wl_registry, id,
-                                        &wl_tablet_manager_interface, 1);
-      _gdk_wayland_device_manager_add_tablet_manager (tablet_manager);
+      GdkDisplay *display = GDK_DISPLAY (display_wayland);
+      display_wayland->tablet_manager =
+        wl_registry_bind(display_wayland->wl_registry, id,
+                         &zwp_tablet_manager_v1_interface, 1);
+      _gdk_wayland_device_manager_add_tablet_seats (display->device_manager);
     }
   else
     handled = FALSE;

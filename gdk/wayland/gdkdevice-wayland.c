@@ -46,6 +46,9 @@ typedef struct _GdkWaylandTouchData GdkWaylandTouchData;
 typedef struct _GdkWaylandPointerFrameData GdkWaylandPointerFrameData;
 typedef struct _GdkWaylandPointerData GdkWaylandPointerData;
 typedef struct _GdkWaylandDeviceTabletPair GdkWaylandDeviceTabletPair;
+typedef struct _GdkWaylandDeviceTabletPair GdkWaylandDeviceTabletPair;
+typedef struct _GdkWaylandTabletDeviceInfo GdkWaylandTabletDeviceInfo;
+typedef struct _GdkWaylandTabletToolInfo GdkWaylandTabletToolInfo;
 
 struct _GdkWaylandTouchData
 {
@@ -94,14 +97,36 @@ struct _GdkWaylandPointerData {
 
 struct _GdkWaylandDeviceTabletPair
 {
-  struct wl_tablet *wl_tablet;
   GdkDevice *master;
   GdkDevice *stylus_device;
   GdkDevice *eraser_device;
   GdkDevice *current_device;
 
-  GdkWaylandDeviceData *wd;
+  GdkWaylandSeat *seat;
   GdkWaylandPointerData pointer_info;
+  GdkWaylandTabletDeviceInfo *deviceinfo;
+  GdkWaylandTabletToolInfo *toolinfo;
+};
+
+struct _GdkWaylandTabletDeviceInfo
+{
+  GdkWaylandDeviceTabletPair *pair;
+  struct zwp_tablet_v1 *wp_tablet;
+  const char *name;
+  guint32 vidpid;
+  const char *path;
+};
+
+struct _GdkWaylandTabletToolInfo
+{
+  GdkWaylandTabletDeviceInfo *deviceinfo;
+  struct zwp_tablet_tool_v1 *wp_tablet_tool;
+  enum zwp_tablet_tool_v1_type type;
+  guint64 hardware_serial;
+  guint64 hardware_id_wacom;
+  enum zwp_tablet_tool_v1_capability capability;
+
+  GdkDeviceTool *tool;
 };
 
 struct _GdkWaylandSeat
@@ -115,7 +140,7 @@ struct _GdkWaylandSeat
   struct wl_touch *wl_touch;
   struct zwp_pointer_gesture_swipe_v1 *wp_pointer_gesture_swipe;
   struct zwp_pointer_gesture_pinch_v1 *wp_pointer_gesture_pinch;
-  struct zwp_tablet_manager_v1 *wl_tablet_manager;
+  struct zwp_tablet_seat_v1 *wp_tablet_seat;
 
   GdkDisplay *display;
   GdkDeviceManager *device_manager;
@@ -196,8 +221,11 @@ typedef struct _GdkWaylandDeviceManagerClass GdkWaylandDeviceManagerClass;
 struct _GdkWaylandDeviceManager
 {
   GdkDeviceManager parent_object;
+  struct zwp_tablet_manager_v1 *wp_tablet_manager;
   GList *devices;
   GList *tablet_pairs;
+  GList *tablets;
+  GList *tools;
 };
 
 struct _GdkWaylandDeviceManagerClass
@@ -286,7 +314,7 @@ gdk_wayland_seat_update_window_cursor (GdkDevice *device)
   GdkWaylandDeviceTabletPair *pair;
   gboolean retval = G_SOURCE_REMOVE;
 
-  pair = gdk_wayland_device_manager_find_tablet_pair (wd->device_manager, device);
+  pair = gdk_wayland_device_manager_find_tablet_pair (seat->device_manager, device);
 
   if (pointer->cursor)
     {
@@ -300,23 +328,6 @@ gdk_wayland_seat_update_window_cursor (GdkDevice *device)
       return retval;
     }
 
-  if (pair)
-    {
-      wl_tablet_set_cursor (pair->wl_tablet,
-                            pointer->enter_serial,
-                            pointer->pointer_surface,
-                            x, y);
-    }
-  else if (seat->wl_pointer)
-    {
-      wl_pointer_set_cursor (seat->wl_pointer,
-                             pointer->enter_serial,
-                             pointer->pointer_surface,
-                             x, y);
-    }
-  else
-    return retval;
-
   if (buffer)
     {
       wl_surface_attach (pointer->pointer_surface, buffer, 0, 0);
@@ -324,17 +335,45 @@ gdk_wayland_seat_update_window_cursor (GdkDevice *device)
       wl_surface_damage (pointer->pointer_surface,  0, 0, w, h);
       wl_surface_commit (pointer->pointer_surface);
 
-      wl_pointer_set_cursor (seat->wl_pointer,
-                             pointer->enter_serial,
-                             pointer->pointer_surface,
-                             x, y);
+      if (pair)
+        {
+          zwp_tablet_tool_v1_set_cursor (pair->toolinfo->wp_tablet_tool,
+                                         pointer->enter_serial,
+                                         pointer->pointer_surface,
+                                         x, y);
+        }
+      else if (seat->wl_pointer)
+        {
+          wl_pointer_set_cursor (seat->wl_pointer,
+                                 pointer->enter_serial,
+                                 pointer->pointer_surface,
+                                 x, y);
+        }
+      else
+        {
+          return retval;
+        }
     }
   else
     {
-      wl_pointer_set_cursor (seat->wl_pointer,
-                             pointer->enter_serial,
-                             NULL,
-                             0, 0);
+      if (pair)
+        {
+          zwp_tablet_tool_v1_set_cursor (pair->toolinfo->wp_tablet_tool,
+                                         pointer->enter_serial,
+                                         NULL,
+                                         0, 0);
+        }
+      else if (seat->wl_pointer)
+        {
+        wl_pointer_set_cursor (seat->wl_pointer,
+                               pointer->enter_serial,
+                               NULL,
+                               0, 0);
+        }
+        else
+        {
+          return retval;
+        }
 
       wl_surface_attach (pointer->pointer_surface, NULL, 0, 0);
       wl_surface_commit (pointer->pointer_surface);
@@ -485,7 +524,7 @@ gdk_wayland_device_query_state (GdkDevice        *device,
   GdkScreen *default_screen;
 
   seat = GDK_WAYLAND_SEAT (gdk_device_get_seat (device));
-  pointer = seat->pointer_info;
+  pointer = &seat->pointer_info;
   default_screen = gdk_display_get_default_screen (seat->display);
 
   if (root_window)
@@ -493,7 +532,7 @@ gdk_wayland_device_query_state (GdkDevice        *device,
   if (child_window)
     *child_window = pointer->focus;
   if (mask)
-    *mask = device_get_modifiers (seat);
+    *mask = device_get_modifiers (seat->master_pointer);
 
   get_coordinates (&seat->pointer_info, win_x, win_y, root_x, root_y);
 }
@@ -723,7 +762,7 @@ gdk_wayland_device_window_at_position (GdkDevice       *device,
   GdkWaylandPointerData *pointer;
 
   seat = GDK_WAYLAND_SEAT (gdk_device_get_seat (device));
-  pointer = seat->pointer_info;
+  pointer = &seat->pointer_info;
 
   if (device == seat->master_pointer)
     {
@@ -1217,6 +1256,7 @@ pointer_handle_enter (void              *data,
 
   if (!surface)
     return;
+
   if (!GDK_IS_WINDOW (wl_surface_get_user_data (surface)))
     return;
 
@@ -1306,7 +1346,7 @@ pointer_handle_leave (void              *data,
 
   g_object_unref (seat->pointer_info.focus);
   if (seat->cursor)
-    gdk_wayland_pointer_stop_window_cursor_animation (&seat->pointer_info);
+    gdk_wayland_pointer_stop_cursor_animation (&seat->pointer_info);
 
   seat->pointer_info.focus = NULL;
 
@@ -1339,7 +1379,7 @@ pointer_handle_motion (void              *data,
   gdk_event_set_seat (event, GDK_SEAT (seat));
   event->motion.time = time;
   event->motion.axes = NULL;
-  event->motion.state = device_get_modifiers (device->master_pointer);
+  event->motion.state = device_get_modifiers (seat->master_pointer);
   event->motion.is_hint = 0;
   gdk_event_set_screen (event, display->screen);
 
@@ -2027,7 +2067,7 @@ _create_touch_event (GdkWaylandSeat       *seat,
   event->touch.state = device_get_modifiers (seat->touch_master);
   gdk_event_set_screen (event, display->screen);
   event->touch.sequence = GDK_SLOT_TO_EVENT_SEQUENCE (touch->id);
-  event->touch.state = device->key_modifiers;
+  event->touch.state = seat->key_modifiers;
 
   if (evtype != GDK_TOUCH_BEGIN)
     event->touch.state |= GDK_BUTTON1_MASK;
@@ -2197,7 +2237,7 @@ emit_gesture_swipe_event (GdkWaylandSeat          *seat,
   if (!seat->pointer_info.focus)
     return;
 
-  seat->time = _time;
+  seat->pointer_info.time = _time;
 
   event = gdk_event_new (GDK_TOUCHPAD_SWIPE);
   event->touchpad_swipe.phase = phase;
@@ -2392,73 +2432,6 @@ gesture_pinch_end (void                                *data,
                             0, 0, 1, 0);
 }
 
-static GdkDevice *
-tablet_select_device_for_tool (GdkWaylandDeviceTabletPair *device_pair,
-                               GdkDeviceTool              *tool)
-{
-  GdkDevice *device;
-
-  if (gdk_device_tool_get_tool_type (tool) == GDK_DEVICE_TOOL_TYPE_ERASER)
-    device = device_pair->eraser_device;
-  else
-    device = device_pair->stylus_device;
-
-  return device;
-}
-
-static void
-_gdk_wayland_device_manager_remove_tablet (GdkWaylandDeviceTabletPair *device_pair)
-{
-  GdkWaylandDeviceManager *device_manager =
-    GDK_WAYLAND_DEVICE_MANAGER (device_pair->wd->device_manager);
-
-  wl_tablet_release (device_pair->wl_tablet);
-
-  device_manager->devices =
-    g_list_remove (device_manager->devices, device_pair->master);
-  device_manager->devices =
-    g_list_remove (device_manager->devices, device_pair->stylus_device);
-  device_manager->devices =
-    g_list_remove (device_manager->devices, device_pair->eraser_device);
-
-  g_signal_emit_by_name (device_manager, "device-removed",
-                         device_pair->stylus_device);
-  g_signal_emit_by_name (device_manager, "device-removed",
-                         device_pair->eraser_device);
-  g_signal_emit_by_name (device_manager, "device-removed",
-                         device_pair->master);
-
-  _gdk_device_set_associated_device (device_pair->master, NULL);
-  _gdk_device_set_associated_device (device_pair->stylus_device, NULL);
-  _gdk_device_set_associated_device (device_pair->eraser_device, NULL);
-
-  if (device_pair->pointer_info.focus)
-    g_object_unref (device_pair->pointer_info.focus);
-
-  wl_surface_destroy (device_pair->pointer_info.pointer_surface);
-  g_object_unref (device_pair->master);
-  g_object_unref (device_pair->stylus_device);
-  g_object_unref (device_pair->eraser_device);
-  g_free (device_pair);
-
-  device_manager->tablet_pairs =
-    g_list_remove (device_manager->tablet_pairs, device_pair);
-}
-
-static void
-tablet_handler_placeholder ()
-{
-}
-
-static void
-tablet_handle_removed (void             *data,
-                       struct wl_tablet *wl_tablet)
-{
-  GdkWaylandDeviceTabletPair *device_pair = data;
-
-  _gdk_wayland_device_manager_remove_tablet (device_pair);
-}
-
 static const struct wl_pointer_listener pointer_listener = {
   pointer_handle_enter,
   pointer_handle_leave,
@@ -2498,20 +2471,6 @@ static const struct zwp_pointer_gesture_pinch_v1_listener gesture_pinch_listener
   gesture_pinch_begin,
   gesture_pinch_update,
   gesture_pinch_end
-};
-
-static const struct wl_tablet_listener tablet_listener = {
-  tablet_handler_placeholder, /* proximity_in */
-  tablet_handler_placeholder, /* proximity_out */
-  tablet_handler_placeholder, /* motion */
-  tablet_handler_placeholder, /* down */
-  tablet_handler_placeholder, /* up */
-  tablet_handler_placeholder, /* pressure */
-  tablet_handler_placeholder, /* distance */
-  tablet_handler_placeholder, /* tilt */
-  tablet_handler_placeholder, /* button */
-  tablet_handler_placeholder, /* frame */
-  tablet_handle_removed
 };
 
 static void
@@ -2702,80 +2661,147 @@ static const struct wl_seat_listener seat_listener = {
   seat_handle_name,
 };
 
-static void
-tablet_tool_handle_removed (void                  *data,
-                            struct wl_tablet_tool *wl_tool)
+static GdkDevice *
+tablet_select_device_for_tool (GdkWaylandDeviceTabletPair *device_pair,
+                               GdkDeviceTool              *tool)
 {
-  GdkDeviceTool *tool = data;
+  GdkDevice *device;
 
-  gdk_device_tool_unref (tool);
+  if (gdk_device_tool_get_tool_type (tool) == GDK_DEVICE_TOOL_TYPE_ERASER)
+    device = device_pair->eraser_device;
+  else
+    device = device_pair->stylus_device;
+
+  return device;
 }
 
-static const struct wl_tablet_tool_listener tablet_tool_listener = {
-  tablet_tool_handle_removed
-};
+static inline GdkDeviceToolType
+wp_tool_type_to_gdk_tool_type (enum zwp_tablet_tool_v1_type wp_tool_type)
+{
+  GdkDeviceToolType tool_type;
+
+  switch (wp_tool_type)
+    {
+    case ZWP_TABLET_TOOL_V1_TYPE_PEN:
+      tool_type = GDK_DEVICE_TOOL_TYPE_PEN;
+      break;
+    case ZWP_TABLET_TOOL_V1_TYPE_BRUSH:
+      tool_type = GDK_DEVICE_TOOL_TYPE_BRUSH;
+      break;
+    case ZWP_TABLET_TOOL_V1_TYPE_AIRBRUSH:
+      tool_type = GDK_DEVICE_TOOL_TYPE_AIRBRUSH;
+      break;
+    case ZWP_TABLET_TOOL_V1_TYPE_PENCIL:
+      tool_type = GDK_DEVICE_TOOL_TYPE_PENCIL;
+      break;
+    case ZWP_TABLET_TOOL_V1_TYPE_ERASER:
+      tool_type = GDK_DEVICE_TOOL_TYPE_ERASER;
+      break;
+    default: /* FIXME: finger, mouse, lens, ... */
+      tool_type = GDK_DEVICE_TOOL_TYPE_UNKNOWN;
+      break;
+    };
+
+  return tool_type;
+}
+
+GdkAxisFlags
+wp_tablet_tool_axis_flag_to_gdk_axes (enum zwp_tablet_tool_v1_capability tool_axes)
+{
+  GdkAxisFlags axes = GDK_AXIS_FLAG_X | GDK_AXIS_FLAG_Y;
+
+  if (tool_axes & ZWP_TABLET_TOOL_V1_CAPABILITY_TILT)
+    axes |= GDK_AXIS_FLAG_XTILT | GDK_AXIS_FLAG_YTILT;
+  if (tool_axes & ZWP_TABLET_TOOL_V1_CAPABILITY_DISTANCE)
+    axes |= GDK_AXIS_FLAG_DISTANCE;
+  if (tool_axes & ZWP_TABLET_TOOL_V1_CAPABILITY_PRESSURE)
+    axes |= GDK_AXIS_FLAG_PRESSURE;
+
+  /* NOTE: The GDK "wheel" axis is used under X11 for the
+   * (absolute) position of the airbrush tool's fingerwheel.
+   * In Wayland, this same control is advertised as a "slider".
+   * The Wayland "wheel" capability is reserved for (relative)
+   * puck scrollwheels.
+   */
+  if (tool_axes & ZWP_TABLET_TOOL_V1_CAPABILITY_SLIDER)
+    axes |= GDK_AXIS_FLAG_WHEEL;
+
+  /* TODO: rotation, wheel */
+
+  return axes;
+}
 
 static void
-tablet_manager_handle_device_added (void                     *data,
-                                    struct wl_tablet_manager *wl_tablet_manager,
-                                    struct wl_tablet         *id,
-                                    const char               *name,
-                                    uint32_t                  vid,
-                                    uint32_t                  pid,
-                                    uint32_t                  type)
+gdk_wayland_remove_device_pair_devices (GdkWaylandTabletDeviceInfo *deviceinfo)
 {
-  GdkWaylandDeviceData *device =
-    wl_tablet_manager_get_user_data (wl_tablet_manager);
+  GdkWaylandDeviceTabletPair *device_pair = deviceinfo->pair;
   GdkWaylandDeviceManager *device_manager =
-    GDK_WAYLAND_DEVICE_MANAGER (device->device_manager);
-  GdkWaylandDisplay *wayland_display = GDK_WAYLAND_DISPLAY (device->display);
-  GdkWaylandDeviceTabletPair *device_pair;
+    GDK_WAYLAND_DEVICE_MANAGER (device_pair->seat->device_manager);
+
+  device_manager->devices =
+    g_list_remove (device_manager->devices, device_pair->master);
+  device_manager->devices =
+    g_list_remove (device_manager->devices, device_pair->stylus_device);
+  device_manager->devices =
+    g_list_remove (device_manager->devices, device_pair->eraser_device);
+
+  g_signal_emit_by_name (device_manager, "device-removed",
+                         device_pair->stylus_device);
+  g_signal_emit_by_name (device_manager, "device-removed",
+                         device_pair->eraser_device);
+  g_signal_emit_by_name (device_manager, "device-removed",
+                         device_pair->master);
+
+  _gdk_device_set_associated_device (device_pair->master, NULL);
+  _gdk_device_set_associated_device (device_pair->stylus_device, NULL);
+  _gdk_device_set_associated_device (device_pair->eraser_device, NULL);
+}
+
+static void
+gdk_wayland_create_device_pair_devices (GdkWaylandTabletDeviceInfo *deviceinfo)
+{
+  GdkWaylandDeviceTabletPair *device_pair = deviceinfo->pair;
+  GdkWaylandSeat *seat = device_pair->seat;
+  GdkWaylandDeviceManager *device_manager = 
+    GDK_WAYLAND_DEVICE_MANAGER (seat->device_manager);
   GdkDevice *master, *stylus_device, *eraser_device;
   gchar *master_name, *eraser_name;
 
-  device_pair = g_new0 (GdkWaylandDeviceTabletPair, 1);
-  device_pair->wd = device;
-  device_pair->pointer_info.current_output_scale = 1;
-  device_pair->pointer_info.pointer_surface =
-    wl_compositor_create_surface (wayland_display->compositor);
-  device_pair->wl_tablet = id;
-
-  master_name = g_strdup_printf ("Master pointer for %s", name);
+  master_name = g_strdup_printf ("Master pointer for %s", deviceinfo->name);
   master = g_object_new (GDK_TYPE_WAYLAND_DEVICE,
                          "name", master_name,
                          "type", GDK_DEVICE_TYPE_MASTER,
                          "input-source", GDK_SOURCE_MOUSE,
                          "input-mode", GDK_MODE_SCREEN,
                          "has-cursor", TRUE,
-                         "display", device->display,
-                         "device-manager", device->device_manager,
+                         "display", seat->display,
+                         "device-manager", device_manager,
+                         "seat", seat,
                          NULL);
-  GDK_WAYLAND_DEVICE (master)->device = device;
   GDK_WAYLAND_DEVICE (master)->pointer = &device_pair->pointer_info;
 
-  eraser_name = g_strconcat (name, " (Eraser)", NULL);
-
   stylus_device = g_object_new (GDK_TYPE_WAYLAND_DEVICE,
-                                "name", name,
+                                "name", deviceinfo->name,
                                 "type", GDK_DEVICE_TYPE_SLAVE,
                                 "input-source", GDK_SOURCE_PEN,
                                 "input-mode", GDK_MODE_SCREEN,
                                 "has-cursor", FALSE,
-                                "display", device->display,
-                                "device-manager", device->device_manager,
+                                "display", seat->display,
+                                "device-manager", device_manager,
+                                "seat", seat,
                                 NULL);
-  GDK_WAYLAND_DEVICE (stylus_device)->device = device;
 
+  eraser_name = g_strconcat (deviceinfo->name, " (Eraser)", NULL);
   eraser_device = g_object_new (GDK_TYPE_WAYLAND_DEVICE,
                                 "name", eraser_name,
                                 "type", GDK_DEVICE_TYPE_SLAVE,
                                 "input-source", GDK_SOURCE_ERASER,
                                 "input-mode", GDK_MODE_SCREEN,
                                 "has-cursor", FALSE,
-                                "display", device->display,
-                                "device-manager", device->device_manager,
+                                "display", seat->display,
+                                "device-manager", device_manager,
+                                "seat", seat,
                                 NULL);
-  GDK_WAYLAND_DEVICE (eraser_device)->device = device;
 
   device_pair->master = master;
   device_manager->devices =
@@ -2792,9 +2818,7 @@ tablet_manager_handle_device_added (void                     *data,
     g_list_prepend (device_manager->devices, device_pair->eraser_device);
   g_signal_emit_by_name (device_manager, "device-added", eraser_device);
 
-  wl_tablet_add_listener (id, &tablet_listener, device_pair);
-
-  _gdk_device_set_associated_device (master, device->master_keyboard);
+  _gdk_device_set_associated_device (master, seat->master_keyboard);
   _gdk_device_set_associated_device (stylus_device, master);
   _gdk_device_set_associated_device (eraser_device, master);
 
@@ -2805,92 +2829,213 @@ tablet_manager_handle_device_added (void                     *data,
   g_free (master_name);
 }
 
-static inline GdkDeviceToolType
-wl_tool_type_to_gdk_tool_type (enum wl_tablet_tool_type wl_tool_type)
+static void
+tablet_tool_handle_type (void                         *data,
+                         struct zwp_tablet_tool_v1    *wp_tool,
+                         enum zwp_tablet_tool_v1_type  type)
 {
-  GdkDeviceToolType tool_type;
-
-  switch (wl_tool_type)
-    {
-    case WL_TABLET_TOOL_TYPE_PEN:
-      tool_type = GDK_DEVICE_TOOL_TYPE_PEN;
-      break;
-    case WL_TABLET_TOOL_TYPE_BRUSH:
-      tool_type = GDK_DEVICE_TOOL_TYPE_BRUSH;
-      break;
-    case WL_TABLET_TOOL_TYPE_AIRBRUSH:
-      tool_type = GDK_DEVICE_TOOL_TYPE_AIRBRUSH;
-      break;
-    case WL_TABLET_TOOL_TYPE_PENCIL:
-      tool_type = GDK_DEVICE_TOOL_TYPE_PENCIL;
-      break;
-    case WL_TABLET_TOOL_TYPE_ERASER:
-      tool_type = GDK_DEVICE_TOOL_TYPE_ERASER;
-      break;
-    default:
-      tool_type = GDK_DEVICE_TOOL_TYPE_UNKNOWN;
-      break;
-    };
-
-  return tool_type;
-}
-
-GdkAxisFlags
-wl_tablet_tool_axis_flag_to_gdk_axes (uint32_t tool_axes)
-{
-  GdkAxisFlags axes = GDK_AXIS_FLAG_X | GDK_AXIS_FLAG_Y;
-
-  if (tool_axes & WL_TABLET_TOOL_AXIS_FLAG_TILT)
-    axes |= GDK_AXIS_FLAG_XTILT | GDK_AXIS_FLAG_YTILT;
-  if (tool_axes & WL_TABLET_TOOL_AXIS_FLAG_DISTANCE)
-    axes |= GDK_AXIS_FLAG_DISTANCE;
-  if (tool_axes & WL_TABLET_TOOL_AXIS_FLAG_PRESSURE)
-    axes |= GDK_AXIS_FLAG_PRESSURE;
-
-  return axes;
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  toolinfo->type = type;
 }
 
 static void
-tablet_manager_handle_tool_added (void                     *data,
-                                  struct wl_tablet_manager *wl_tablet_manager,
-                                  struct wl_tablet_tool    *wl_tablet_tool,
-                                  struct wl_tablet         *wl_tablet,
-                                  uint32_t                  tool_type,
-                                  uint32_t                  tool_serial,
-                                  uint32_t                  extra_axes)
+tablet_tool_handle_hardware_serial(void                         *data,
+                                   struct zwp_tablet_tool_v1    *wp_tool,
+                                   uint32_t                      hi32,
+                                   uint32_t                      lo32)
 {
-  GdkWaylandDeviceTabletPair *device_pair =
-    wl_tablet_get_user_data (wl_tablet);
-  GdkDeviceTool *tool;
-
-  tool = gdk_device_tool_new (tool_serial,
-                              wl_tool_type_to_gdk_tool_type (tool_type),
-                              wl_tablet_tool_axis_flag_to_gdk_axes (extra_axes));
-
-  gdk_device_add_tool (tablet_select_device_for_tool (device_pair, tool),
-                       tool);
-
-  wl_tablet_tool_add_listener (wl_tablet_tool, &tablet_tool_listener, tool);
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  toolinfo->hardware_serial = ((guint64)hi32 << 32) | lo32;
 }
 
 static void
-tablet_manager_handle_seat (void                     *data,
-                            struct wl_tablet_manager *wl_tablet_manager,
-                            struct wl_seat           *seat)
+tablet_tool_handle_hardware_id_wacom (void                         *data,
+                                      struct zwp_tablet_tool_v1    *wp_tool,
+                                      uint32_t                      hi32,
+                                      uint32_t                      lo32)
 {
-  GdkWaylandDeviceData *device = wl_seat_get_user_data (seat);
-
-  /* FIXME: This event should go away when the protocol gets merged into wayland,
-   * and this should just be done in _gdk_wayland_device_manager_add_tablet_manager().
-   */
-  device->wl_tablet_manager = wl_tablet_manager;
-  wl_tablet_manager_set_user_data (device->wl_tablet_manager, device);
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  toolinfo->hardware_id_wacom = ((guint64)hi32 << 32) | lo32;
 }
 
-static const struct wl_tablet_manager_listener tablet_manager_listener = {
-  tablet_manager_handle_device_added,
-  tablet_manager_handle_tool_added,
-  tablet_manager_handle_seat
+static void
+tablet_tool_handle_capability (void                               *data,
+                               struct zwp_tablet_tool_v1          *wp_tool,
+                               enum zwp_tablet_tool_v1_capability  caps)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  toolinfo->capability = caps;
+}
+
+static void
+tablet_tool_handle_done (void                         *data,
+                         struct zwp_tablet_tool_v1    *wp_tool)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+
+  toolinfo->tool = gdk_device_tool_new (toolinfo->hardware_serial,
+                                        wp_tool_type_to_gdk_tool_type (toolinfo->type),
+                                        wp_tablet_tool_axis_flag_to_gdk_axes (toolinfo->capability));
+}
+
+static void
+tablet_tool_handle_removed (void                      *data,
+                            struct zwp_tablet_tool_v1 *wp_tool)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+
+  zwp_tablet_tool_v1_destroy (wp_tool);
+  gdk_device_tool_unref (toolinfo->tool);
+  g_free (toolinfo);
+}
+
+static void
+tablet_handle_name (void                 *data,
+                    struct zwp_tablet_v1 *wp_tablet,
+                    const char           *name)
+{
+  GdkWaylandTabletDeviceInfo *deviceinfo = data;
+  deviceinfo->name = name;
+}
+
+static void
+tablet_handle_id (void                 *data,
+                  struct zwp_tablet_v1 *wp_tablet,
+                  uint32_t              vid,
+                  uint32_t              pid)
+{
+  GdkWaylandTabletDeviceInfo *deviceinfo = data;
+  deviceinfo->vidpid = ((guint64)vid << 32) | pid;
+}
+
+static void
+tablet_handle_path (void                 *data,
+                    struct zwp_tablet_v1 *wp_tablet,
+                    const char           *path)
+{
+  GdkWaylandTabletDeviceInfo *deviceinfo = data;
+  deviceinfo->path = path;
+}
+
+static void
+tablet_handle_done (void                 *data,
+                    struct zwp_tablet_v1 *wp_tablet)
+{
+  GdkWaylandTabletDeviceInfo *deviceinfo = data;
+
+  gdk_wayland_create_device_pair_devices (deviceinfo);
+}
+
+static void
+tablet_handle_removed (void                 *data,
+                       struct zwp_tablet_v1 *wp_tablet)
+{
+  GdkWaylandTabletDeviceInfo *deviceinfo = data;
+  GdkWaylandDeviceTabletPair *device_pair = deviceinfo->pair;
+  GdkWaylandDeviceManager *device_manager = 
+    GDK_WAYLAND_DEVICE_MANAGER (device_pair->seat->device_manager);
+
+  zwp_tablet_v1_destroy (wp_tablet);
+  gdk_wayland_remove_device_pair_devices (deviceinfo);
+
+  if (device_pair->pointer_info.focus)
+    g_object_unref (device_pair->pointer_info.focus);
+
+  wl_surface_destroy (device_pair->pointer_info.pointer_surface);
+  g_object_unref (device_pair->master);
+  g_object_unref (device_pair->stylus_device);
+  g_object_unref (device_pair->eraser_device);
+
+  device_manager->tablet_pairs =
+    g_list_remove (device_manager->tablet_pairs, device_pair);
+
+  g_free (device_pair);
+  g_free (deviceinfo);
+}
+
+static void
+tablet_handler_placeholder ()
+{
+}
+
+static const struct zwp_tablet_tool_v1_listener tablet_tool_listener = {
+  tablet_tool_handle_type,
+  tablet_tool_handle_hardware_serial,
+  tablet_tool_handle_hardware_id_wacom,
+  tablet_tool_handle_capability,
+  tablet_tool_handle_done,
+  tablet_tool_handle_removed,
+  tablet_handler_placeholder, /* proximity_in */
+  tablet_handler_placeholder, /* proximity_out */
+  tablet_handler_placeholder, /* down */
+  tablet_handler_placeholder, /* up */
+  tablet_handler_placeholder, /* motion */
+  tablet_handler_placeholder, /* pressure */
+  tablet_handler_placeholder, /* distance */
+  tablet_handler_placeholder, /* tilt */
+  tablet_handler_placeholder, /* rotation */
+  tablet_handler_placeholder, /* slider */
+  tablet_handler_placeholder, /* wheel */
+  tablet_handler_placeholder, /* button */
+  tablet_handler_placeholder  /* frame */
+};
+
+static const struct zwp_tablet_v1_listener tablet_listener = {
+  tablet_handle_name,
+  tablet_handle_id,
+  tablet_handle_path,
+  tablet_handle_done,
+  tablet_handle_removed
+};
+
+static void
+tablet_seat_handle_tablet_added (void                      *data,
+                                 struct zwp_tablet_seat_v1 *wp_tablet_seat,
+                                 struct zwp_tablet_v1      *wp_tablet)
+{
+  GdkWaylandSeat *seat = data;
+  GdkDeviceManager *device_manager = seat->device_manager;
+  GdkWaylandDeviceManager *wdm = GDK_WAYLAND_DEVICE_MANAGER (device_manager);
+  GdkWaylandDisplay *wayland_display = GDK_WAYLAND_DISPLAY (seat->display);
+  GdkWaylandTabletDeviceInfo *deviceinfo;
+  GdkWaylandDeviceTabletPair *device_pair;
+
+  device_pair = g_new0 (GdkWaylandDeviceTabletPair, 1);
+  device_pair->seat = seat;
+  device_pair->pointer_info.current_output_scale = 1;
+  device_pair->pointer_info.pointer_surface =
+    wl_compositor_create_surface (wayland_display->compositor);
+  wdm->tablet_pairs = g_list_prepend(wdm->tablet_pairs,
+                                     device_pair);
+
+  deviceinfo = g_new0 (GdkWaylandTabletDeviceInfo, 1);
+  deviceinfo->wp_tablet = wp_tablet;
+  deviceinfo->pair = device_pair;
+  wdm->tablets = g_list_prepend(wdm->tablets, deviceinfo);
+
+  zwp_tablet_v1_add_listener (wp_tablet, &tablet_listener, deviceinfo);
+}
+
+static void
+tablet_seat_handle_tool_added (void                      *data,
+                               struct zwp_tablet_seat_v1 *wp_tablet_seat,
+                               struct zwp_tablet_tool_v1 *wp_tablet_tool)
+{
+  GdkWaylandSeat *seat = data;
+  GdkDeviceManager *device_manager = seat->device_manager;
+  GdkWaylandDeviceManager *wdm = GDK_WAYLAND_DEVICE_MANAGER (device_manager);
+  GdkWaylandTabletToolInfo *toolinfo;
+
+  toolinfo = g_new0 (GdkWaylandTabletToolInfo, 1);
+  toolinfo->wp_tablet_tool = wp_tablet_tool;
+  wdm->tools = g_list_prepend(wdm->tools, toolinfo);
+
+  zwp_tablet_tool_v1_add_listener (wp_tablet_tool, &tablet_tool_listener, toolinfo);
+}
+
+static const struct zwp_tablet_seat_v1_listener tablet_seat_listener = {
+  tablet_seat_handle_tablet_added,
+  tablet_seat_handle_tool_added
 };
 
 static void
@@ -3282,6 +3427,24 @@ gdk_wayland_seat_get_slaves (GdkSeat             *seat,
 }
 
 static void
+gdk_wayland_seat_add_tablet_seat (GdkWaylandSeat *seat)
+{
+  GdkDisplay *display = gdk_seat_get_display (GDK_SEAT (seat));
+  GdkWaylandDisplay *display_wayland = GDK_WAYLAND_DISPLAY (display);
+  struct zwp_tablet_manager_v1 *tablet_manager;
+
+  tablet_manager = display_wayland->tablet_manager;
+  if (tablet_manager == NULL)
+    return;
+
+  seat->wp_tablet_seat = zwp_tablet_manager_v1_get_tablet_seat (tablet_manager,
+                                                                seat->wl_seat);
+  zwp_tablet_seat_v1_add_listener (seat->wp_tablet_seat,
+                                   &tablet_seat_listener,
+                                   seat);  
+}
+
+static void
 gdk_wayland_seat_class_init (GdkWaylandSeatClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
@@ -3355,6 +3518,7 @@ _gdk_wayland_device_manager_add_seat (GdkDeviceManager *device_manager,
 
   init_devices (seat);
 
+  gdk_wayland_seat_add_tablet_seat (seat);
   gdk_display_add_seat (display, GDK_SEAT (seat));
 }
 
@@ -3374,9 +3538,9 @@ _gdk_wayland_device_manager_remove_seat (GdkDeviceManager *manager,
       if (seat->id != id)
         continue;
 
-      for (l = seat->device_manager->tablet_pairs; l != NULL; l = l->next)
-        _gdk_wayland_device_manager_remove_tablet (l->data);
-      zwp_tablet_manager_v1_destroy (seat->wl_tablet_manager);
+      zwp_tablet_seat_v1_destroy(seat->wp_tablet_seat);
+
+      /* FIXME: When is a good time to call zwp_tablet_manager_v1_destroy? */
 
       gdk_display_remove_seat (display, GDK_SEAT (seat));
       break;
@@ -3386,12 +3550,20 @@ _gdk_wayland_device_manager_remove_seat (GdkDeviceManager *manager,
 }
 
 void
-_gdk_wayland_device_manager_add_tablet_manager (struct wl_tablet_manager *wl_tablet_manager)
+_gdk_wayland_device_manager_add_tablet_seats (GdkDeviceManager *manager)
 {
-  wl_tablet_manager_add_listener (wl_tablet_manager, &tablet_manager_listener,
-                                  NULL);
+  GdkDisplay *display = gdk_device_manager_get_display (manager);
+  GList *l, *seats;
 
-  /* FIXME: Handle the rest in tablet_manager_handle_seat () for now */
+  seats = gdk_display_list_seats (display);
+
+  for (l = seats; l != NULL; l = l->next)
+    {
+      GdkWaylandSeat *seat = l->data;
+      gdk_wayland_seat_add_tablet_seat (seat);
+    }
+
+  g_list_free (seats);
 }
 
 static void
