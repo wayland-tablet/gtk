@@ -128,6 +128,7 @@ struct _GdkWaylandTabletToolInfo
 
   GdkDeviceTool *tool;
   gchar status;
+  gchar button_status;
   gint pressure_axis_index;
   gint distance_axis_index;
   gint xtilt_axis_index;
@@ -3028,6 +3029,32 @@ tablet_tool_handle_proximity_out (void                      *data,
 }
 
 static void
+tablet_tool_handle_down (void                      *data,
+                         struct zwp_tablet_tool_v1 *wp_tool,
+                         uint32_t                   serial)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  GdkWaylandTabletDeviceInfo *deviceinfo = toolinfo->deviceinfo;
+  GdkWaylandDeviceTabletPair *device_pair = deviceinfo->pair;
+  GdkWaylandSeat *seat = device_pair->seat;
+  GdkWaylandDisplay *wayland_display = GDK_WAYLAND_DISPLAY (seat->display);
+
+  toolinfo->button_status = 1;
+
+  _gdk_wayland_display_update_serial (wayland_display, serial);
+  device_pair->pointer_info.press_serial = serial;
+}
+
+static void
+tablet_tool_handle_up (void                      *data,
+                       struct zwp_tablet_tool_v1 *wp_tool)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+
+  toolinfo->button_status = -1;
+}
+
+static void
 tablet_tool_handle_motion (void                      *data,
                            struct zwp_tablet_tool_v1 *wp_tool,
                            wl_fixed_t                 sx,
@@ -3188,6 +3215,45 @@ tablet_tool_handle_frame (void                      *data,
 
   _gdk_wayland_display_deliver_event (seat->display, event);
 
+  if (toolinfo->button_status != 0)
+    {
+      event = NULL;
+      if (toolinfo->button_status == 1)
+        event = gdk_event_new (GDK_BUTTON_PRESS);
+      else if (toolinfo->button_status == -1)
+        event = gdk_event_new (GDK_BUTTON_RELEASE);
+      event->button.window = g_object_ref (device_pair->pointer_info.focus);
+      gdk_event_set_device (event, device_pair->master);
+      gdk_event_set_source_device (event, device_pair->current_device);
+      event->button.time = device_pair->pointer_info.time;
+      event->button.axes =
+        g_memdup (toolinfo->axes,
+                  sizeof (gdouble) *
+                  gdk_device_get_n_axes (device_pair->current_device));
+      event->button.state = device_get_modifiers (device_pair->master);
+      event->button.button = GDK_BUTTON_PRIMARY;
+      gdk_event_set_screen (event, wayland_display->screen);
+
+      get_coordinates (&device_pair->pointer_info,
+                       &event->button.x,
+                       &event->button.y,
+                       &event->button.x_root,
+                       &event->button.y_root);
+
+      if (toolinfo->button_status == 1)
+        device_pair->pointer_info.button_modifiers |= GDK_BUTTON1_MASK;
+      else if (toolinfo->button_status == -1)
+        device_pair->pointer_info.button_modifiers &= ~GDK_BUTTON1_MASK;
+
+      GDK_NOTE (EVENTS,
+                g_message ("button %d %s, state %d",
+                           event->button.button,
+                           toolinfo->button_status == 1 ? "press" : "release",
+                           event->button.state));
+
+      _gdk_wayland_display_deliver_event (seat->display, event);
+    }
+
   if (toolinfo->status == -1)
     {
       event = gdk_event_new (GDK_LEAVE_NOTIFY);
@@ -3232,6 +3298,7 @@ tablet_tool_handle_frame (void                      *data,
     }
 
     toolinfo->status = 0;
+    toolinfo->button_status = 0;
 }
 
 static void
@@ -3312,8 +3379,8 @@ static const struct zwp_tablet_tool_v1_listener tablet_tool_listener = {
   tablet_tool_handle_removed,
   tablet_tool_handle_proximity_in,
   tablet_tool_handle_proximity_out,
-  tablet_handler_placeholder, /* down */
-  tablet_handler_placeholder, /* up */
+  tablet_tool_handle_down,
+  tablet_tool_handle_up,
   tablet_tool_handle_motion,
   tablet_tool_handle_pressure,
   tablet_tool_handle_distance,
