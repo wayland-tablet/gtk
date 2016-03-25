@@ -370,13 +370,12 @@ gdk_wayland_device_warp (GdkDevice *device,
 }
 
 static void
-get_coordinates (GdkWaylandSeat       *seat,
-                 double               *x,
-                 double               *y,
-                 double               *x_root,
-                 double               *y_root)
+get_coordinates (GdkWaylandPointerData *pointer,
+                 double                *x,
+                 double                *y,
+                 double                *x_root,
+                 double                *y_root)
 {
-  GdkWaylandPointerData *pointer = &seat->pointer_info;
   int root_x, root_y;
 
   if (x)
@@ -444,7 +443,7 @@ gdk_wayland_device_query_state (GdkDevice        *device,
   if (mask)
     *mask = device_get_modifiers (seat);
 
-  get_coordinates (seat, win_x, win_y, root_x, root_y);
+  get_coordinates (&seat->pointer_info, win_x, win_y, root_x, root_y);
 }
 
 static void
@@ -1037,7 +1036,7 @@ create_scroll_event (GdkWaylandSeat *seat,
 
   _gdk_event_set_pointer_emulated (event, emulated);
 
-  get_coordinates (seat->master_pointer,
+  get_coordinates (&seat->pointer_info,
                    &event->scroll.x,
                    &event->scroll.y,
                    &event->scroll.x_root,
@@ -1186,7 +1185,7 @@ pointer_handle_enter (void              *data,
 
   gdk_wayland_seat_update_window_cursor (seat->master_pointer);
 
-  get_coordinates (seat,
+  get_coordinates (&seat->pointer_info,
                    &event->crossing.x,
                    &event->crossing.y,
                    &event->crossing.x_root,
@@ -1235,7 +1234,7 @@ pointer_handle_leave (void              *data,
 
   gdk_wayland_seat_update_window_cursor (seat->master_pointer);
 
-  get_coordinates (seat,
+  get_coordinates (&seat->pointer_info,
                    &event->crossing.x,
                    &event->crossing.y,
                    &event->crossing.x_root,
@@ -1284,7 +1283,7 @@ pointer_handle_motion (void              *data,
   event->motion.is_hint = 0;
   gdk_event_set_screen (event, display->screen);
 
-  get_coordinates (seat,
+  get_coordinates (&seat->pointer_info,
                    &event->motion.x,
                    &event->motion.y,
                    &event->motion.x_root,
@@ -1352,7 +1351,7 @@ pointer_handle_button (void              *data,
   event->button.button = gdk_button;
   gdk_event_set_screen (event, display->screen);
 
-  get_coordinates (seat,
+  get_coordinates (&seat->pointer_info,
                    &event->button.x,
                    &event->button.y,
                    &event->button.x_root,
@@ -2153,7 +2152,7 @@ emit_gesture_swipe_event (GdkWaylandSeat          *seat,
   event->touchpad_swipe.dy = dy;
   event->touchpad_swipe.n_fingers = n_fingers;
 
-  get_coordinates (seat,
+  get_coordinates (&seat->pointer_info,
                    &event->touchpad_swipe.x,
                    &event->touchpad_swipe.y,
                    &event->touchpad_swipe.x_root,
@@ -2258,7 +2257,7 @@ emit_gesture_pinch_event (GdkWaylandSeat          *seat,
   event->touchpad_pinch.angle_delta = angle_delta * G_PI / 180;
   event->touchpad_pinch.n_fingers = n_fingers;
 
-  get_coordinates (seat,
+  get_coordinates (&seat->pointer_info,
                    &event->touchpad_pinch.x,
                    &event->touchpad_pinch.y,
                    &event->touchpad_pinch.x_root,
