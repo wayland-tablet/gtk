@@ -241,8 +241,9 @@ gdk_wayland_pointer_stop_cursor_animation (GdkWaylandPointerData *pointer)
 }
 
 static gboolean
-gdk_wayland_seat_update_window_cursor (GdkWaylandSeat *seat)
+gdk_wayland_seat_update_window_cursor (GdkDevice *device)
 {
+  GdkWaylandSeat *seat = GDK_WAYLAND_SEAT (gdk_device_get_seat (device));
   GdkWaylandPointerData *pointer = &seat->pointer_info;
   struct wl_buffer *buffer;
   int x, y, w, h, scale;
@@ -303,7 +304,7 @@ gdk_wayland_seat_update_window_cursor (GdkWaylandSeat *seat)
           /* Queue timeout for next frame */
           id = g_timeout_add (next_image_delay,
                               (GSourceFunc)gdk_wayland_seat_update_window_cursor,
-                              seat);
+                              device);
           g_source_set_name_by_id (id, "[gtk+] gdk_wayland_seat_update_window_cursor");
           pointer->cursor_timeout_id = id;
         }
@@ -357,7 +358,7 @@ gdk_wayland_device_set_window_cursor (GdkDevice *device,
 
   pointer->cursor = g_object_ref (cursor);
 
-  gdk_wayland_device_update_window_cursor (seat);
+  gdk_wayland_seat_update_window_cursor (device);
 }
 
 static void
@@ -604,7 +605,7 @@ gdk_wayland_device_grab (GdkDevice    *device,
       if (cursor)
         wayland_seat->cursor = g_object_ref (cursor);
 
-      gdk_wayland_seat_update_window_cursor (wayland_seat);
+      gdk_wayland_seat_update_window_cursor (device);
     }
 
   return GDK_GRAB_SUCCESS;
@@ -642,7 +643,7 @@ gdk_wayland_device_ungrab (GdkDevice *device,
   else
     {
       /* Device is a pointer */
-      gdk_wayland_seat_update_window_cursor (wayland_seat);
+      gdk_wayland_seat_update_window_cursor (device);
 
       if (pointer->grab_window)
         _gdk_wayland_window_set_grab_seat (pointer->grab_window,
@@ -1183,7 +1184,7 @@ pointer_handle_enter (void              *data,
   event->crossing.focus = TRUE;
   event->crossing.state = 0;
 
-  gdk_wayland_seat_update_window_cursor (seat);
+  gdk_wayland_seat_update_window_cursor (seat->master_pointer);
 
   get_coordinates (seat,
                    &event->crossing.x,
@@ -1232,7 +1233,7 @@ pointer_handle_leave (void              *data,
   event->crossing.focus = TRUE;
   event->crossing.state = 0;
 
-  gdk_wayland_seat_update_window_cursor (seat);
+  gdk_wayland_seat_update_window_cursor (seat->master_pointer);
 
   get_coordinates (seat,
                    &event->crossing.x,
@@ -2632,7 +2633,7 @@ pointer_surface_update_scale (GdkWaylandSeat *seat)
   if (pointer->cursor)
     _gdk_wayland_cursor_set_scale (pointer->cursor, scale);
 
-  gdk_wayland_seat_update_window_cursor (seat);
+  gdk_wayland_seat_update_window_cursor (seat->master_pointer);
 }
 
 static void
@@ -2818,7 +2819,7 @@ gdk_wayland_seat_grab (GdkSeat                *seat,
 
       gdk_wayland_seat_set_global_cursor (seat, cursor);
       g_set_object (&wayland_seat->cursor, cursor);
-      gdk_wayland_seat_update_window_cursor (wayland_seat);
+      gdk_wayland_seat_update_window_cursor (wayland_seat->master_pointer);
     }
 
   if (wayland_seat->touch_master &&
@@ -2896,7 +2897,7 @@ gdk_wayland_seat_ungrab (GdkSeat *seat)
                                    focus, GDK_CROSSING_UNGRAB,
                                    GDK_CURRENT_TIME);
 
-      gdk_wayland_seat_update_window_cursor (wayland_seat);
+      gdk_wayland_seat_update_window_cursor (wayland_seat->master_pointer);
     }
 
   if (wayland_seat->master_keyboard)
