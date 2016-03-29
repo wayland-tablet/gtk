@@ -128,6 +128,12 @@ struct _GdkWaylandTabletToolInfo
 
   GdkDeviceTool *tool;
   gchar status;
+  gint pressure_axis_index;
+  gint distance_axis_index;
+  gint xtilt_axis_index;
+  gint ytilt_axis_index;
+  gint wheel_axis_index;
+  gdouble *axes;
 };
 
 struct _GdkWaylandSeat
@@ -2733,6 +2739,82 @@ wp_tablet_tool_axis_flag_to_gdk_axes (enum zwp_tablet_tool_v1_capability tool_ax
 }
 
 static void
+gdk_wayland_device_tablet_clone_tool_axes (GdkWaylandTabletToolInfo *toolinfo)
+{
+  GdkWaylandDeviceTabletPair *device_pair = toolinfo->deviceinfo->pair;
+  GdkDeviceTool *tool = toolinfo->tool;
+  gint axis_pos;
+
+  g_object_freeze_notify (G_OBJECT (device_pair->current_device));
+  _gdk_device_reset_axes (device_pair->current_device);
+
+  _gdk_device_add_axis (device_pair->current_device, GDK_NONE, GDK_AXIS_X, 0, 0, 0);
+  _gdk_device_add_axis (device_pair->current_device, GDK_NONE, GDK_AXIS_Y, 0, 0, 0);
+
+  if (tool->tool_axes & (GDK_AXIS_FLAG_XTILT | GDK_AXIS_FLAG_YTILT))
+    {
+      axis_pos = _gdk_device_add_axis (device_pair->current_device, GDK_NONE,
+                                       GDK_AXIS_XTILT, -90, 90, 0);
+      toolinfo->xtilt_axis_index = axis_pos;
+
+      axis_pos = _gdk_device_add_axis (device_pair->current_device, GDK_NONE,
+                                       GDK_AXIS_YTILT, -90, 90, 0);
+      toolinfo->ytilt_axis_index = axis_pos;
+    }
+  if (tool->tool_axes & GDK_AXIS_FLAG_DISTANCE)
+    {
+      axis_pos = _gdk_device_add_axis (device_pair->current_device, GDK_NONE,
+                                       GDK_AXIS_DISTANCE, 0, 65535, 0);
+      toolinfo->distance_axis_index = axis_pos;
+    }
+  if (tool->tool_axes & GDK_AXIS_FLAG_PRESSURE)
+    {
+      axis_pos = _gdk_device_add_axis (device_pair->current_device, GDK_NONE,
+                                       GDK_AXIS_PRESSURE, 0, 65535, 0);
+      toolinfo->pressure_axis_index = axis_pos;
+    }
+  if (tool->tool_axes & GDK_AXIS_FLAG_WHEEL)
+    {
+      axis_pos = _gdk_device_add_axis (device_pair->current_device, GDK_NONE,
+                                       GDK_AXIS_WHEEL, -65535, 65535, 0);
+      toolinfo->wheel_axis_index = axis_pos;
+    }
+
+  if (toolinfo->axes)
+    g_free(toolinfo->axes);
+
+  toolinfo->axes =
+    g_new0 (gdouble, gdk_device_get_n_axes (device_pair->current_device));
+
+  g_object_thaw_notify (G_OBJECT (device_pair->current_device));
+}
+
+static void
+gdk_wayland_mimic_device_axes (GdkDevice *master,
+                               GdkDevice *slave)
+{
+  gdouble axis_min, axis_max, axis_resolution;
+  GdkAtom axis_label;
+  GdkAxisUse axis_use;
+  gint axis_count;
+  gint i;
+
+  g_object_freeze_notify (G_OBJECT (master));
+  _gdk_device_reset_axes (master);
+  axis_count = gdk_device_get_n_axes (slave);
+
+  for (i = 0; i < axis_count; i++)
+    {
+      _gdk_device_get_axis_info (slave, i, &axis_label, &axis_use, &axis_min,
+                                 &axis_max, &axis_resolution);
+      _gdk_device_add_axis (master, axis_label, axis_use, axis_min,
+                            axis_max, axis_resolution);
+    }
+
+  g_object_thaw_notify (G_OBJECT (master));
+}
+
+static void
 gdk_wayland_remove_device_pair_devices (GdkWaylandTabletDeviceInfo *deviceinfo)
 {
   GdkWaylandDeviceTabletPair *device_pair = deviceinfo->pair;
@@ -2886,6 +2968,10 @@ tablet_tool_handle_removed (void                      *data,
   GdkWaylandTabletToolInfo *toolinfo = data;
 
   zwp_tablet_tool_v1_destroy (wp_tool);
+
+  if (toolinfo->axes)
+    g_free (toolinfo->axes);
+
   gdk_device_tool_unref (toolinfo->tool);
   g_free (toolinfo);
 }
@@ -2928,6 +3014,8 @@ tablet_tool_handle_proximity_in (void                      *data,
     gdk_device_add_tool (device_pair->current_device, toolinfo->tool);
 
   gdk_device_update_tool (device_pair->current_device, toolinfo->tool);
+  gdk_wayland_device_tablet_clone_tool_axes (toolinfo);
+  gdk_wayland_mimic_device_axes (device_pair->master, device_pair->current_device);
 }
 
 static void
@@ -2952,6 +3040,67 @@ tablet_tool_handle_motion (void                      *data,
   device_pair->pointer_info.time = (guint32)(g_get_monotonic_time () / 1000);
   device_pair->pointer_info.surface_x = wl_fixed_to_double (sx);
   device_pair->pointer_info.surface_y = wl_fixed_to_double (sy);
+}
+
+static void
+tablet_tool_handle_pressure (void                      *data,
+                             struct zwp_tablet_tool_v1 *wp_tool,
+                             uint32_t                   pressure)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  gint axis_index = toolinfo->pressure_axis_index;
+  GdkWaylandDeviceTabletPair *device_pair = toolinfo->deviceinfo->pair;
+
+  _gdk_device_translate_axis (device_pair->current_device, axis_index,
+                              pressure,
+                              &toolinfo->axes[axis_index]);
+}
+
+static void
+tablet_tool_handle_distance (void                      *data,
+                             struct zwp_tablet_tool_v1 *wp_tool,
+                             uint32_t                   distance)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  gint axis_index = toolinfo->distance_axis_index;
+  GdkWaylandDeviceTabletPair *device_pair = toolinfo->deviceinfo->pair;
+
+  _gdk_device_translate_axis (device_pair->current_device, axis_index,
+                              distance,
+                              &toolinfo->axes[axis_index]);
+}
+
+static void
+tablet_tool_handle_tilt (void                      *data,
+                         struct zwp_tablet_tool_v1 *wp_tool,
+                         int32_t                    tilt_x,
+                         int32_t                    tilt_y)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  gint xtilt_axis_index = toolinfo->xtilt_axis_index;
+  gint ytilt_axis_index = toolinfo->ytilt_axis_index;
+  GdkWaylandDeviceTabletPair *device_pair = toolinfo->deviceinfo->pair;
+
+  _gdk_device_translate_axis (device_pair->current_device, xtilt_axis_index,
+                              tilt_x / 100.0,
+                              &toolinfo->axes[xtilt_axis_index]);
+  _gdk_device_translate_axis (device_pair->current_device, ytilt_axis_index,
+                              tilt_y / 100.0,
+                              &toolinfo->axes[ytilt_axis_index]);
+}
+
+static void
+tablet_tool_handle_slider (void                      *data,
+                           struct zwp_tablet_tool_v1 *wp_tool,
+                           int32_t                    position)
+{
+  GdkWaylandTabletToolInfo *toolinfo = data;
+  gint axis_index = toolinfo->wheel_axis_index;
+  GdkWaylandDeviceTabletPair *device_pair = toolinfo->deviceinfo->pair;
+
+  _gdk_device_translate_axis (device_pair->current_device, axis_index,
+                              position,
+                              &toolinfo->axes[axis_index]);
 }
 
 static void
@@ -3017,6 +3166,10 @@ tablet_tool_handle_frame (void                      *data,
   gdk_event_set_device (event, device_pair->master);
   gdk_event_set_source_device (event, device_pair->current_device);
   event->motion.time = device_pair->pointer_info.time;
+  event->motion.axes =
+    g_memdup (toolinfo->axes,
+              sizeof (gdouble) *
+              gdk_device_get_n_axes (device_pair->current_device));
   event->motion.state = device_get_modifiers (device_pair->master);
   event->motion.is_hint = FALSE;
   gdk_event_set_screen (event, wayland_display->screen);
@@ -3162,11 +3315,11 @@ static const struct zwp_tablet_tool_v1_listener tablet_tool_listener = {
   tablet_handler_placeholder, /* down */
   tablet_handler_placeholder, /* up */
   tablet_tool_handle_motion,
-  tablet_handler_placeholder, /* pressure */
-  tablet_handler_placeholder, /* distance */
-  tablet_handler_placeholder, /* tilt */
+  tablet_tool_handle_pressure,
+  tablet_tool_handle_distance,
+  tablet_tool_handle_tilt,
   tablet_handler_placeholder, /* rotation */
-  tablet_handler_placeholder, /* slider */
+  tablet_tool_handle_slider,
   tablet_handler_placeholder, /* wheel */
   tablet_handler_placeholder, /* button */
   tablet_tool_handle_frame
